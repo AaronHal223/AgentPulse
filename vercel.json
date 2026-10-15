@@ -1,6 +1,0 @@
-{
-  "crons": [
-    { "path": "/api/cron/search", "schedule": "0 10 * * *" },
-    { "path": "/api/cron/send-briefs", "schedule": "30 11 * * *" }
-  ]
-}

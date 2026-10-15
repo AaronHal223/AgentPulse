@@ -138,5 +138,5 @@ export async function sendBriefForAgent(agent: Agent, appUrl: string): Promise<n
 }
 
 export function appUrlFrom(req: Request) {
-  return (process.env.APP_URL || new URL(req.url).origin).replace(/\/$/, "");
+  return (process.env.APP_URL || process.env.RENDER_EXTERNAL_URL || new URL(req.url).origin).replace(/\/$/, "");
 }

@@ -39,32 +39,47 @@ With no `DATABASE_URL`, an embedded Postgres database (PGlite) is created in `./
 |---|---|---|
 | `ANTHROPIC_API_KEY` | Chat, web search, reading listings, scoring | [console.anthropic.com](https://console.anthropic.com) |
 | `AUTH_SECRET` | Signs login sessions | `openssl rand -base64 32` |
-| `DATABASE_URL` | Postgres (required in production) | Free at [neon.tech](https://neon.tech) |
+| `DATABASE_URL` | Postgres (required in production) | Created for you on Render, or any Postgres |
 | `ORS_API_KEY` | Geocoding + drive times | Free at [openrouteservice.org](https://openrouteservice.org/dev/#/signup) |
 | `RESEND_API_KEY`, `EMAIL_FROM` | Emailing the daily brief | [resend.com](https://resend.com) |
-| `CRON_SECRET`, `APP_URL` | Scheduled daily searches + emails | `openssl rand -hex 24`, your site URL |
+| `APP_URL` | Links in the brief email | Your site address |
 
-## Deploy (Vercel + Neon)
+## Put it on your phone
 
-1. Create a free Postgres database on [Neon](https://neon.tech) and copy its connection string.
-2. Import this repo into [Vercel](https://vercel.com/new).
-3. Add the environment variables from the table above (`DATABASE_URL` is required).
-4. Deploy. The build runs database migrations automatically (`npm run build` → `db:migrate` → `next build`).
+AgentPulse is an installable web app — one codebase is both the website and the phone app.
 
-## Daily brief scheduling
+- **iPhone / iPad:** open the site in Safari → Share → **Add to Home Screen**.
+- **Android:** open the site in Chrome → tap **Install app** (or ⋮ → Install app).
+- **Computer:** Chrome or Edge shows an install icon in the address bar.
 
-Each client's search takes 1–3 minutes, so the brief runs in two steps:
+It opens full-screen with its own icon, a bottom tab bar, and a friendly offline screen. Updates arrive automatically — no app store.
 
-- `GET /api/cron/search` searches clients that haven't been searched in ~20 hours, stops before the function time limit, and returns `{ remaining }`.
-- `GET /api/cron/send-briefs` emails every agent their new in-area homes scoring 6+.
+## Deploy on Render
 
-Both require `Authorization: Bearer $CRON_SECRET`.
+The repo includes `render.yaml`, which creates everything in one go:
 
-**Recommended — GitHub Actions** (`.github/workflows/daily-brief.yml`): calls the search endpoint repeatedly until every client is done, then sends the emails. Add repository secrets `APP_URL` and `CRON_SECRET` (Settings → Secrets and variables → Actions). It runs at 10:30 UTC daily and can be started by hand from the Actions tab.
+| Render resource | What it is |
+|---|---|
+| `agentpulse` (Web Service) | The website / app. Health check at `/api/health`. |
+| `agentpulse-db` (Postgres) | The database. Migrations run automatically on every deploy. |
+| `agentpulse-daily-brief` (Cron Job) | Every morning: searches for every active client, then emails each agent. |
 
-**Also included — Vercel Cron** (`vercel.json`): one search call and one email call per day. Fine for a handful of clients; for more, rely on the GitHub Action. Remove the `crons` block if you only want the Action.
+1. In Render: **New → Blueprint** → choose this repo.
+2. Fill in the keys it asks for (`ANTHROPIC_API_KEY`, `ORS_API_KEY`, `RESEND_API_KEY`, `EMAIL_FROM`, and `APP_URL` = your site address). `AUTH_SECRET` and `CRON_SECRET` are generated for you.
+3. Deploy. Your site is at `https://agentpulse.onrender.com` (or similar).
 
-Agents can also press **Run today's searches** and **Email me the brief** on the dashboard at any time.
+### Every push is checked before it goes live
+
+`.github/workflows/ci.yml` runs on every push: type-check → production build → starts the app → smoke test (signs up, creates and edits a client, loads every page, checks the phone-app files). Render's `autoDeployTrigger: checksPass` only deploys a commit after those checks pass, so a broken push never reaches your users.
+
+Run the same checks yourself: `npm run build && npm start` then `npm run test:smoke`.
+
+### Running the brief by hand
+
+- In the app: **Run today's searches** and **Email me the brief** on the dashboard.
+- On Render: open the `agentpulse-daily-brief` Cron Job → **Trigger Run**.
+- Anywhere with the env vars set: `npm run brief`.
+- Over HTTP (for other hosts): `GET /api/cron/search` then `GET /api/cron/send-briefs` with `Authorization: Bearer $CRON_SECRET` — or run the manual **Daily brief** GitHub Action.
 
 ## How it works
 
@@ -104,3 +119,5 @@ Tech: Next.js (App Router), TypeScript, Tailwind CSS, Drizzle ORM + Postgres, Cl
 | `npm run db:generate` | Create a migration after changing `schema.ts` |
 | `npm run seed:demo` | Demo agent, clients and homes |
 | `npm run lint` | Type-check |
+| `npm run test:smoke` | End-to-end smoke test against a running app (`BASE_URL`) |
+| `npm run brief` | Run the daily searches + emails once |

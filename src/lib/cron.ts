@@ -1,5 +1,5 @@
 import "server-only";
-import { HttpError } from "./auth";
+import { HttpError } from "./errors";
 
 /** Scheduled jobs authenticate with `Authorization: Bearer $CRON_SECRET` (Vercel Cron and the GitHub Action both send it). */
 export function assertCron(req: Request) {

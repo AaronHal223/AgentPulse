@@ -1,7 +1,7 @@
 import "server-only";
 import { and, eq } from "drizzle-orm";
 import { getDb, schema } from "./db";
-import { HttpError } from "./auth";
+import { HttpError } from "./errors";
 import type { Buyer } from "./db/schema";
 import { ProfilePatch, patchToUpdate } from "./profile";
 

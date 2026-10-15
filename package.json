@@ -11,7 +11,9 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
     "build:app": "next build",
-    "seed:demo": "tsx scripts/seed-demo.ts"
+    "seed:demo": "tsx scripts/seed-demo.ts",
+    "brief": "tsx --conditions=react-server scripts/daily-brief.ts",
+    "test:smoke": "node scripts/smoke-test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.134.0",

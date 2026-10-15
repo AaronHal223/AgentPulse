@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { getDb, schema } from "./db";
 import { SESSION_COOKIE, signSession, verifySession, sessionCookieOptions } from "./session";
 import type { Agent } from "./db/schema";
+import { HttpError } from "./errors";
 
 export async function startSession(agentId: string) {
   const jar = await cookies();
@@ -32,14 +33,7 @@ export async function requireAgent(): Promise<Agent> {
   return agent;
 }
 
-export class HttpError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
+export { HttpError };
 
 /** For API routes: returns the logged-in agent or throws 401. */
 export async function apiAgent(): Promise<Agent> {
