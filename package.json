@@ -1,0 +1,43 @@
+{
+  "name": "agentpulse-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI copilot for real estate agents: buyer profiles that evolve, web-wide home matching with 1-10 fit scores and drive times, and a daily brief.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "npm run db:migrate && next build",
+    "start": "next start",
+    "lint": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "build:app": "next build",
+    "seed:demo": "tsx scripts/seed-demo.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.134.0",
+    "@electric-sql/pglite": "^0.5.10",
+    "bcryptjs": "^3.0.3",
+    "drizzle-orm": "^0.45.4",
+    "jose": "^6.2.12",
+    "lucide-react": "^1.57.0",
+    "next": "^16.4.1",
+    "postgres": "^3.4.9",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "server-only": "^0.0.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "drizzle-kit": "^0.31.11",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4",
+    "typescript": "~5.9"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  }
+}

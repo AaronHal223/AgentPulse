@@ -1,0 +1,34 @@
+# Runs the AgentPulse daily brief every morning.
+# Add two repository secrets (Settings → Secrets and variables → Actions):
+#   APP_URL      e.g. https://agentpulse-ai.vercel.app
+#   CRON_SECRET  the same value as CRON_SECRET in your deployment
+name: Daily brief
+
+on:
+  schedule:
+    - cron: "30 10 * * *" # 10:30 UTC ≈ 6:30 AM Eastern (5:30 AM in winter)
+  workflow_dispatch: {}
+
+jobs:
+  brief:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Search for new homes for every client
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then echo "Set APP_URL and CRON_SECRET secrets"; exit 1; fi
+          for i in $(seq 1 40); do
+            res=$(curl -sS --max-time 330 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/search" || echo '{"remaining":1}')
+            echo "$res"
+            remaining=$(echo "$res" | sed -n 's/.*"remaining":\([0-9]*\).*/\1/p')
+            [ "${remaining:-1}" = "0" ] && break
+            sleep 5
+          done
+      - name: Email each agent their brief
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: curl -sS --fail-with-body --max-time 150 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/send-briefs"
