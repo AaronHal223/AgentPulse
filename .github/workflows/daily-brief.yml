@@ -30,4 +30,5 @@ jobs:
         env:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-        run: curl -sS --fail-with-body --max-time 150 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/send-briefs"
+        run: |
+          curl -sS --fail-with-body --max-time 150 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/send-briefs"
