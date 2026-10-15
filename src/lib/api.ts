@@ -1,7 +1,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
-import { HttpError } from "./auth";
+import { HttpError } from "./errors";
 
 /** Wraps a route handler so thrown errors become clean JSON responses. */
 export function handler<Args extends unknown[]>(fn: (...args: Args) => Promise<Response>) {

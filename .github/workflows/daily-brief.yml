@@ -1,12 +1,11 @@
-# Runs the AgentPulse daily brief every morning.
+# Backup way to run the daily brief by hand (Actions tab → Daily brief → Run workflow).
+# On Render the "agentpulse-daily-brief" Cron Job runs it automatically every morning.
 # Add two repository secrets (Settings → Secrets and variables → Actions):
-#   APP_URL      e.g. https://agentpulse-ai.vercel.app
+#   APP_URL      e.g. https://agentpulse.onrender.com
 #   CRON_SECRET  the same value as CRON_SECRET in your deployment
 name: Daily brief
 
 on:
-  schedule:
-    - cron: "30 10 * * *" # 10:30 UTC ≈ 6:30 AM Eastern (5:30 AM in winter)
   workflow_dispatch: {}
 
 jobs:

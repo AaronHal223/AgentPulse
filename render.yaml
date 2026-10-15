@@ -1,0 +1,59 @@
+# One-click Render setup: website + database + daily brief job.
+# Render → New → Blueprint → pick this repo. You'll be asked for the API keys marked `sync: false`.
+services:
+  - type: web
+    name: agentpulse
+    runtime: node
+    region: virginia
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: checksPass # deploy only after GitHub CI passes
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: agentpulse-db
+          property: connectionString
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: CRON_SECRET
+        generateValue: true
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ORS_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: APP_TIMEZONE
+        value: America/New_York
+
+  - type: cron
+    name: agentpulse-daily-brief
+    runtime: node
+    region: virginia
+    schedule: "30 10 * * *" # 10:30 UTC ≈ 6:30 AM Eastern
+    buildCommand: npm ci --include=dev
+    startCommand: npm run brief
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: agentpulse-db
+          property: connectionString
+      - key: ANTHROPIC_API_KEY
+        fromService: { name: agentpulse, type: web, envVarKey: ANTHROPIC_API_KEY }
+      - key: ORS_API_KEY
+        fromService: { name: agentpulse, type: web, envVarKey: ORS_API_KEY }
+      - key: RESEND_API_KEY
+        fromService: { name: agentpulse, type: web, envVarKey: RESEND_API_KEY }
+      - key: EMAIL_FROM
+        fromService: { name: agentpulse, type: web, envVarKey: EMAIL_FROM }
+      - key: APP_URL
+        sync: false # your site address, e.g. https://agentpulse.onrender.com
+
+databases:
+  - name: agentpulse-db
+    region: virginia
+    databaseName: agentpulse
+    user: agentpulse

@@ -4,6 +4,7 @@ import { Car, MessageSquareText, Search, Sunrise } from "lucide-react";
 import { currentAgent } from "@/lib/auth";
 import { Logo } from "@/components/Logo";
 import { ScoreBadge } from "@/components/ScoreBadge";
+import { InstallButton } from "@/components/InstallButton";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,7 @@ export default async function Home() {
 
   return (
     <div className="min-h-screen">
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5">
+      <header className="mx-auto flex max-w-6xl items-center justify-between px-4 pt-[calc(1.25rem+env(safe-area-inset-top))] pb-5">
         <Logo />
         <div className="flex items-center gap-2">
           <Link href="/login" className="btn-ghost">Log in</Link>
@@ -55,6 +56,9 @@ export default async function Home() {
           <div className="mt-8 flex flex-wrap gap-3">
             <Link href="/signup" className="btn-brand !px-6 !py-3 text-base">Create your workspace</Link>
             <Link href="/login" className="btn-ghost !px-6 !py-3 text-base">I have an account</Link>
+          </div>
+          <div className="mt-4">
+            <InstallButton />
           </div>
         </div>
 
