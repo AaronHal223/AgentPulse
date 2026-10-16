@@ -1,19 +1,18 @@
 import "server-only";
-import type Anthropic from "@anthropic-ai/sdk";
 import { asc, eq } from "drizzle-orm";
 import { getDb, schema } from "../db";
 import type { Agent, Buyer } from "../db/schema";
 import { applyProfilePatch } from "../buyers";
 import { changedFieldLabels, profileFieldsJsonSchema, profileForPrompt } from "../profile";
-import { runAgentLoop, webSearchTool } from "./claude";
+import { runAgent, type ToolSpec } from "./provider";
 
-const updateProfileTool: Anthropic.Messages.Tool = {
+const updateProfileTool: ToolSpec = {
   name: "update_buyer_profile",
   description:
     "Save new or corrected information about this buyer to their profile. Call it whenever the agent shares anything about the buyer's needs, budget, places they need to be near, preferences, or situation. Only include fields that changed. For list fields, send the COMPLETE updated list (existing items you're keeping plus new ones). Always also send a refreshed aiSummary.",
-  input_schema: {
+  schema: {
     type: "object",
-    properties: profileFieldsJsonSchema as unknown as Record<string, unknown>,
+    properties: profileFieldsJsonSchema,
   },
 };
 
@@ -62,10 +61,11 @@ export async function chatAboutBuyer(agent: Agent, buyer: Buyer, userText: strin
   let current = buyer;
   const changed = new Set<string>();
 
-  const { text } = await runAgentLoop({
+  const { text } = await runAgent({
     system: systemPrompt(agent, current),
     messages: msgs,
-    tools: [updateProfileTool, webSearchTool(3)],
+    tools: [updateProfileTool],
+    web: { searches: 3, pageReads: 0 },
     maxTokens: 4000,
     onClientTool: async (name, input) => {
       if (name !== "update_buyer_profile") return { result: `Unknown tool ${name}` };

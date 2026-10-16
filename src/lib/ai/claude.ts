@@ -1,9 +1,10 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
+import { AiServiceError, type AgentRequest, type AgentResult } from "./types";
 
 let client: Anthropic | null = null;
 
-export function claude(): Anthropic {
+function claude(): Anthropic {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error("ANTHROPIC_API_KEY is not set. Add it to your environment (see README).");
   }
@@ -11,12 +12,12 @@ export function claude(): Anthropic {
   return client;
 }
 
-export const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
+const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
 
-export const webSearchTool = (maxUses: number) =>
+const webSearchTool = (maxUses: number) =>
   ({ type: "web_search_20260318", name: "web_search", max_uses: maxUses }) as unknown as Anthropic.Messages.ToolUnion;
 
-export const webFetchTool = (maxUses: number) =>
+const webFetchTool = (maxUses: number) =>
   ({
     type: "web_fetch_20260318",
     name: "web_fetch",
@@ -24,32 +25,44 @@ export const webFetchTool = (maxUses: number) =>
     max_content_tokens: 12000,
   }) as unknown as Anthropic.Messages.ToolUnion;
 
-export type ClientToolHandler = (
-  name: string,
-  input: unknown,
-) => Promise<{ result: string; stop?: boolean }>;
+function toolsFor(req: AgentRequest): Anthropic.Messages.ToolUnion[] {
+  const tools: Anthropic.Messages.ToolUnion[] = req.tools.map((t) => ({
+    name: t.name,
+    description: t.description,
+    input_schema: t.schema as Anthropic.Messages.Tool.InputSchema,
+  }));
+  if (req.web?.searches) tools.push(webSearchTool(req.web.searches));
+  if (req.web?.pageReads) tools.push(webFetchTool(req.web.pageReads));
+  return tools;
+}
 
 /**
  * Runs a Claude conversation that may use server tools (web search / fetch) and our own
  * client tools. Handles `pause_turn` (long searches) and client tool round-trips.
- * Returns the final assistant text. A client tool handler can return `stop: true` to end early
- * (used for "report results" style tools).
  */
-export async function runAgentLoop(opts: {
-  system: string;
-  messages: Anthropic.Messages.MessageParam[];
-  tools: Anthropic.Messages.ToolUnion[];
-  onClientTool?: ClientToolHandler;
-  maxTokens?: number;
-  maxSteps?: number;
-  toolChoice?: Anthropic.Messages.ToolChoice;
-  /** If Claude finishes without calling this client tool, nudge it once and force the call. */
-  requireTool?: string;
-}): Promise<{ text: string; stopped: boolean }> {
-  const messages = [...opts.messages];
-  const maxSteps = opts.maxSteps ?? 12;
+export async function runClaude(req: AgentRequest): Promise<AgentResult> {
+  try {
+    return await loop(req);
+  } catch (err) {
+    if (err instanceof Anthropic.APIError) {
+      const busy = err.status === 429 || err.status === 529 || (err.status ?? 0) >= 500;
+      throw new AiServiceError(
+        busy
+          ? "The AI service is busy right now. Please try again in a minute."
+          : `The AI service returned an error (${err.status ?? "unknown"}).`,
+        busy,
+      );
+    }
+    throw err;
+  }
+}
+
+async function loop(req: AgentRequest): Promise<AgentResult> {
+  const messages: Anthropic.Messages.MessageParam[] = req.messages.map((m) => ({ ...m }));
+  const tools = toolsFor(req);
+  const maxSteps = req.maxSteps ?? 12;
   let lastText = "";
-  let toolChoice = opts.toolChoice;
+  let toolChoice: Anthropic.Messages.ToolChoice | undefined;
   let nudged = false;
 
   for (let step = 0; step < maxSteps; step++) {
@@ -57,10 +70,10 @@ export async function runAgentLoop(opts: {
     const res = await claude()
       .messages.stream({
         model: MODEL,
-        max_tokens: opts.maxTokens ?? 8000,
-        system: opts.system,
+        max_tokens: req.maxTokens ?? 8000,
+        system: req.system,
         messages,
-        tools: opts.tools,
+        tools,
         ...(toolChoice ? { tool_choice: toolChoice } : {}),
       })
       .finalMessage();
@@ -82,14 +95,14 @@ export async function runAgentLoop(opts: {
       const toolUses = res.content.filter(
         (b): b is Anthropic.Messages.ToolUseBlock => b.type === "tool_use",
       );
-      if (!toolUses.length || !opts.onClientTool) return { text: lastText, stopped: false };
+      if (!toolUses.length || !req.onClientTool) return { text: lastText, stopped: false };
 
       messages.push({ role: "assistant", content: res.content });
       const results: Anthropic.Messages.ToolResultBlockParam[] = [];
       let stop = false;
       for (const tu of toolUses) {
         try {
-          const out = await opts.onClientTool(tu.name, tu.input);
+          const out = await req.onClientTool(tu.name, tu.input);
           results.push({ type: "tool_result", tool_use_id: tu.id, content: out.result });
           if (out.stop) stop = true;
         } catch (err) {
@@ -106,12 +119,12 @@ export async function runAgentLoop(opts: {
       continue;
     }
 
-    // end_turn, max_tokens, etc.
-    if (opts.requireTool && !nudged && res.stop_reason === "end_turn") {
+    // end_turn, max_tokens, etc. If a final answer tool was expected, nudge once and force it.
+    if (req.finalTool && !nudged && res.stop_reason === "end_turn") {
       nudged = true;
       messages.push({ role: "assistant", content: res.content });
-      messages.push({ role: "user", content: `Now call ${opts.requireTool} with your results.` });
-      toolChoice = { type: "tool", name: opts.requireTool };
+      messages.push({ role: "user", content: `Now call ${req.finalTool} with your results.` });
+      toolChoice = { type: "tool", name: req.finalTool };
       continue;
     }
     return { text: lastText, stopped: false };
