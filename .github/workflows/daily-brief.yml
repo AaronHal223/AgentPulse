@@ -1,34 +1,41 @@
-# Backup way to run the daily brief by hand (Actions tab → Daily brief → Run workflow).
-# On Render the "agentpulse-daily-brief" Cron Job runs it automatically every morning.
-# Add two repository secrets (Settings → Secrets and variables → Actions):
-#   APP_URL      e.g. https://agentpulse.onrender.com
-#   CRON_SECRET  the same value as CRON_SECRET in your deployment
+# Daily brief: searches for new homes for every client, then emails each agent their brief.
+# Runs every morning at about 6:30 AM Eastern, or by hand (Actions → Daily brief → Run workflow).
+# Needs one repository secret (Settings → Secrets and variables → Actions → New repository secret):
+#   CRON_SECRET  the same value as CRON_SECRET on Render
+# Optional repository variable APP_URL if the site address isn't https://agentpulse-skse.onrender.com
 name: Daily brief
 
 on:
+  schedule:
+    - cron: "30 10 * * *" # 10:30 UTC ≈ 6:30 AM Eastern
   workflow_dispatch: {}
+
+concurrency:
+  group: daily-brief
+  cancel-in-progress: false
 
 jobs:
   brief:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    env:
+      APP_URL: ${{ vars.APP_URL || secrets.APP_URL || 'https://agentpulse-skse.onrender.com' }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
     steps:
-      - name: Search for new homes for every client
-        env:
-          APP_URL: ${{ secrets.APP_URL }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      - name: Wake the app
         run: |
-          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then echo "Set APP_URL and CRON_SECRET secrets"; exit 1; fi
+          if [ -z "$CRON_SECRET" ]; then echo "::error::Add the CRON_SECRET repository secret (same value as on Render)."; exit 1; fi
+          for i in $(seq 1 6); do curl -sS --fail --max-time 90 "$APP_URL/api/live" && break; sleep 10; done
+      - name: Search for new homes for every client
+        run: |
           for i in $(seq 1 40); do
             res=$(curl -sS --max-time 330 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/search" || echo '{"remaining":1}')
             echo "$res"
+            echo "$res" | grep -q '"error"' && echo "$res" | grep -q 'Unauthorized' && { echo "::error::CRON_SECRET doesn't match the one on Render"; exit 1; }
             remaining=$(echo "$res" | sed -n 's/.*"remaining":\([0-9]*\).*/\1/p')
             [ "${remaining:-1}" = "0" ] && break
             sleep 5
           done
       - name: Email each agent their brief
-        env:
-          APP_URL: ${{ secrets.APP_URL }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           curl -sS --fail-with-body --max-time 150 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/send-briefs"

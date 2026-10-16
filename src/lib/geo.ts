@@ -24,6 +24,7 @@ export async function geocode(address: string): Promise<LatLng | null> {
     const data = (await res.json()) as { features?: { geometry: { coordinates: [number, number] } }[] };
     const c = data.features?.[0]?.geometry.coordinates;
     const result = c ? { lng: c[0], lat: c[1] } : null;
+    if (geocodeCache.size >= 500) geocodeCache.delete(geocodeCache.keys().next().value!); // keep memory bounded
     geocodeCache.set(q, result);
     return result;
   } catch (err) {

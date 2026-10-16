@@ -38,8 +38,10 @@ With no `DATABASE_URL`, an embedded Postgres database (PGlite) is created in `./
 | Variable | What it's for | Where to get it |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | Chat, web search, reading listings, scoring | [console.anthropic.com](https://console.anthropic.com) |
-| `AUTH_SECRET` | Signs login sessions | `openssl rand -base64 32` |
-| `DATABASE_URL` | Postgres (required in production) | Created for you on Render, or any Postgres |
+| `AUTH_SECRET` | Signs login sessions (32+ characters, required in production) | `openssl rand -base64 32` |
+| `DATABASE_URL` | Permanent Postgres database (required in production) | Free at [neon.tech](https://neon.tech) |
+| `SIGNUP_CODE` | Invite code needed to create an account (recommended) | Any phrase you choose |
+| `CRON_SECRET` | Lets the daily-brief job call the app | `openssl rand -hex 24` |
 | `ORS_API_KEY` | Geocoding + drive times | Free at [openrouteservice.org](https://openrouteservice.org/dev/#/signup) |
 | `RESEND_API_KEY`, `EMAIL_FROM` | Emailing the daily brief | [resend.com](https://resend.com) |
 | `APP_URL` | Links in the brief email | Your site address |
@@ -54,19 +56,27 @@ AgentPulse is an installable web app — one codebase is both the website and th
 
 It opens full-screen with its own icon, a bottom tab bar, and a friendly offline screen. Updates arrive automatically — no app store.
 
-## Deploy on Render
+## Deploy for free
 
-The repo includes `render.yaml`, which creates everything in one go:
+| Piece | Free service | Notes |
+|---|---|---|
+| Website / app | Render free web service | Sleeps after 15 quiet minutes; the **Keep awake** GitHub Action pings it every 10 minutes, 6 AM–midnight Eastern. |
+| Database | [Neon](https://neon.tech) free Postgres | Permanent (Render's free database is deleted after 30 days). Encrypted connections are enforced by the app. |
+| Daily brief | GitHub Actions (**Daily brief** workflow) | Runs ~6:30 AM Eastern. Render cron jobs aren't free. |
 
-| Render resource | What it is |
-|---|---|
-| `agentpulse` (Web Service) | The website / app. Health check at `/api/health`. |
-| `agentpulse-db` (Postgres) | The database. Migrations run automatically on every deploy. |
-| `agentpulse-daily-brief` (Cron Job) | Every morning: searches for every active client, then emails each agent. |
+1. **Database:** sign up at neon.tech → create a project (region: US East) → copy the connection string (`postgresql://…?sslmode=require`).
+2. **Render:** New → Blueprint → choose this repo (or on an existing web service, open **Environment**). Set `DATABASE_URL` to the Neon string, `SIGNUP_CODE` to an invite code, `APP_URL` to your site address, plus `ANTHROPIC_API_KEY`, `ORS_API_KEY`, `RESEND_API_KEY`, `EMAIL_FROM`. Make sure `AUTH_SECRET` and `CRON_SECRET` are long random values. Health check path: `/api/live`.
+3. **GitHub:** Settings → Secrets and variables → Actions → add secret `CRON_SECRET` (same value as on Render). If your site address isn't `https://agentpulse-skse.onrender.com`, also add a variable `APP_URL`.
+4. Deploy. Tables are created automatically. Check `https://<your-site>/api/health` — it should say `"ok": true`.
 
-1. In Render: **New → Blueprint** → choose this repo.
-2. Fill in the keys it asks for (`ANTHROPIC_API_KEY`, `ORS_API_KEY`, `RESEND_API_KEY`, `EMAIL_FROM`, and `APP_URL` = your site address). `AUTH_SECRET` and `CRON_SECRET` are generated for you.
-3. Deploy. Your site is at `https://agentpulse.onrender.com` (or similar).
+### Keeping data safe
+
+- Each agent only ever sees their own clients and homes (checked on every request).
+- Passwords are stored as bcrypt hashes; login is limited to 10 tries per account per 15 minutes.
+- With `SIGNUP_CODE` set, strangers can't create accounts or spend your AI credits.
+- The app refuses to start without a real `AUTH_SECRET` and a hosted database, and only connects to the database over encrypted connections.
+- Error messages never show database details; pages send security headers (HTTPS-only, no framing) and API responses are never cached.
+- Never commit `.env` or paste keys into the code — keys live only in Render's and GitHub's secret settings.
 
 ### Every push is checked before it goes live
 
@@ -77,9 +87,9 @@ Run the same checks yourself: `npm run build && npm start` then `npm run test:sm
 ### Running the brief by hand
 
 - In the app: **Run today's searches** and **Email me the brief** on the dashboard.
-- On Render: open the `agentpulse-daily-brief` Cron Job → **Trigger Run**.
+- On GitHub: **Actions → Daily brief → Run workflow**.
 - Anywhere with the env vars set: `npm run brief`.
-- Over HTTP (for other hosts): `GET /api/cron/search` then `GET /api/cron/send-briefs` with `Authorization: Bearer $CRON_SECRET` — or run the manual **Daily brief** GitHub Action.
+- Over HTTP (for other hosts): `GET /api/cron/search` then `GET /api/cron/send-briefs` with `Authorization: Bearer $CRON_SECRET`.
 
 ## How it works
 

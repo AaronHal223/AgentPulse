@@ -17,18 +17,26 @@ export async function endSession() {
   jar.delete(SESSION_COOKIE);
 }
 
-export async function currentAgent(): Promise<Agent | null> {
+async function sessionAgent(): Promise<{ agent: Agent | null; staleCookie: boolean }> {
   const jar = await cookies();
   const agentId = await verifySession(jar.get(SESSION_COOKIE)?.value);
-  if (!agentId) return null;
+  if (!agentId) return { agent: null, staleCookie: false };
   const db = await getDb();
   const [agent] = await db.select().from(schema.agents).where(eq(schema.agents.id, agentId)).limit(1);
-  return agent ?? null;
+  // A valid cookie for an account that no longer exists (e.g. after switching databases).
+  return { agent: agent ?? null, staleCookie: !agent };
+}
+
+export async function currentAgent(): Promise<Agent | null> {
+  return (await sessionAgent()).agent;
 }
 
 /** For pages: returns the logged-in agent or sends them to /login. */
 export async function requireAgent(): Promise<Agent> {
-  const agent = await currentAgent();
+  const { agent, staleCookie } = await sessionAgent();
+  // Clear a stale cookie first. Otherwise /login bounces back to /dashboard and the browser
+  // gets stuck in a redirect loop ("this page isn't working").
+  if (staleCookie) redirect("/api/auth/expired");
   if (!agent) redirect("/login");
   return agent;
 }

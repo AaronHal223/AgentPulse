@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "./fetcher";
 
-export function AuthForm({ mode }: { mode: "login" | "signup" }) {
+export function AuthForm({ mode, inviteRequired = false }: { mode: "login" | "signup"; inviteRequired?: boolean }) {
   const router = useRouter();
   const params = useSearchParams();
   const [error, setError] = useState("");
@@ -18,7 +18,9 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     try {
       await api(`/api/auth/${mode}`, { body });
       const next = params.get("next");
-      router.push(next && next.startsWith("/") ? next : mode === "signup" ? "/buyers/new" : "/dashboard");
+      // Only same-site paths ("//evil.com" would leave the site).
+      const safeNext = next && /^\/(?![\/\\])/.test(next) ? next : null;
+      router.push(safeNext ? safeNext : mode === "signup" ? "/buyers/new" : "/dashboard");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -57,11 +59,20 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
           name="password"
           type="password"
           required
-          minLength={mode === "signup" ? 8 : 1}
+          minLength={mode === "signup" ? 10 : 1}
           className="input"
           autoComplete={mode === "signup" ? "new-password" : "current-password"}
         />
       </div>
+      {mode === "signup" && inviteRequired && (
+        <div>
+          <label className="label" htmlFor="inviteCode">Invite code</label>
+          <input id="inviteCode" name="inviteCode" required className="input" autoComplete="off" />
+        </div>
+      )}
+      {mode === "login" && params.get("expired") && !error && (
+        <p className="rounded-lg bg-brand-soft px-3 py-2 text-sm text-ink-soft">Your session ended. Please log in again.</p>
+      )}
       {error && <p className="rounded-lg bg-rust-soft px-3 py-2 text-sm text-rust">{error}</p>}
       <button disabled={busy} className="btn-primary w-full !py-2.5">
         {busy ? "One moment…" : mode === "signup" ? "Create account" : "Log in"}
