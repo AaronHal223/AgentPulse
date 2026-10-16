@@ -4,6 +4,7 @@
  *   npm run brief
  * Unlike the HTTP cron endpoints, it has no time limit, so it finishes every client in one run.
  */
+import "./load-env";
 import { and, asc, eq, isNull, lt, or } from "drizzle-orm";
 import { getDb, schema } from "../src/lib/db";
 import { searchHomesForBuyer } from "../src/lib/ai/search";

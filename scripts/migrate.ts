@@ -3,12 +3,14 @@
  * - With DATABASE_URL set: migrates that Postgres database.
  * - Without it: migrates the local embedded database in ./.data (also done automatically by `npm run dev`).
  */
+import "./load-env";
 import path from "node:path";
 import { allowLocalDb, dbSsl, MISSING_DB_MESSAGE } from "../src/lib/env";
 
 async function main() {
   const migrationsFolder = path.join(process.cwd(), "drizzle");
-  const url = process.env.DATABASE_URL;
+  // Migrations use the direct connection (Neon: DATABASE_URL_UNPOOLED); the app uses the pooled DATABASE_URL.
+  const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
 
   if (url) {
     const postgres = (await import("postgres")).default;
