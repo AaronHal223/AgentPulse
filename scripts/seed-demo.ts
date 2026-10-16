@@ -9,11 +9,12 @@ import fs from "node:fs";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import * as schema from "../src/lib/db/schema";
-import { dbSsl } from "../src/lib/env";
+import { cleanDbUrl, dbSsl } from "../src/lib/env";
 
 async function connect() {
   const migrationsFolder = path.join(process.cwd(), "drizzle");
-  const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
+  const rawUrl = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
+  const url = rawUrl ? cleanDbUrl(rawUrl) : undefined;
   if (url) {
     const postgres = (await import("postgres")).default;
     const { drizzle } = await import("drizzle-orm/postgres-js");

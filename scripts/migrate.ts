@@ -5,12 +5,13 @@
  */
 import "./load-env";
 import path from "node:path";
-import { allowLocalDb, dbSsl, MISSING_DB_MESSAGE } from "../src/lib/env";
+import { allowLocalDb, cleanDbUrl, dbSsl, MISSING_DB_MESSAGE } from "../src/lib/env";
 
 async function main() {
   const migrationsFolder = path.join(process.cwd(), "drizzle");
   // Migrations use the direct connection (Neon: DATABASE_URL_UNPOOLED); the app uses the pooled DATABASE_URL.
-  const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
+  const rawUrl = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
+  const url = rawUrl ? cleanDbUrl(rawUrl) : undefined;
 
   if (url) {
     const postgres = (await import("postgres")).default;
