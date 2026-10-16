@@ -8,6 +8,7 @@ import fs from "node:fs";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import * as schema from "../src/lib/db/schema";
+import { dbSsl } from "../src/lib/env";
 
 async function connect() {
   const migrationsFolder = path.join(process.cwd(), "drizzle");
@@ -15,7 +16,7 @@ async function connect() {
     const postgres = (await import("postgres")).default;
     const { drizzle } = await import("drizzle-orm/postgres-js");
     const { migrate } = await import("drizzle-orm/postgres-js/migrator");
-    const client = postgres(process.env.DATABASE_URL, { max: 1, prepare: false });
+    const client = postgres(process.env.DATABASE_URL, { max: 1, prepare: false, ssl: dbSsl(process.env.DATABASE_URL) });
     const db = drizzle(client, { schema });
     await migrate(db, { migrationsFolder });
     return { db, close: () => client.end() };

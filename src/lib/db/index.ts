@@ -2,6 +2,7 @@ import "server-only";
 import { drizzle as drizzlePg, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
+import { allowLocalDb, dbSsl, MISSING_DB_MESSAGE } from "../env";
 
 export type DB = PostgresJsDatabase<typeof schema>;
 
@@ -10,17 +11,21 @@ const globalForDb = globalThis as unknown as { __agentpulseDb?: Promise<DB> };
 async function init(): Promise<DB> {
   const url = process.env.DATABASE_URL;
   if (url) {
-    // Production / hosted Postgres (Neon, Supabase, Vercel Postgres, RDS...).
-    // Run `npm run db:migrate` (the build does this automatically) to create tables.
-    const client = postgres(url, { max: 5, prepare: false });
+    // Production / hosted Postgres (Neon, Supabase, RDS...). `npm run build` creates the tables.
+    const client = postgres(url, {
+      max: 5,
+      prepare: false, // works with connection poolers (Neon's -pooler host)
+      ssl: dbSsl(url), // never send client data over an unencrypted connection
+      connect_timeout: 15, // a sleeping Neon database takes ~1s to wake
+      idle_timeout: 20, // drop idle sockets before the database host does
+      max_lifetime: 60 * 30,
+    });
     return drizzlePg(client, { schema });
   }
 
-  if (process.env.VERCEL) {
-    throw new Error(
-      "DATABASE_URL is not set. AgentPulse needs a hosted Postgres database in production (e.g. a free Neon database). See README.",
-    );
-  }
+  // The embedded database lives on the server's disk, which hosts like Render wipe on every
+  // restart — so it is only for local development and CI, never for real clients.
+  if (!allowLocalDb()) throw new Error(MISSING_DB_MESSAGE);
 
   // Local development: embedded Postgres (PGlite) stored in ./.data, auto-migrated.
   const { PGlite } = await import("@electric-sql/pglite");

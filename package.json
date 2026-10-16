@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "npm run db:migrate && next build",
-    "start": "next start",
+    "start": "NODE_OPTIONS=\"${NODE_OPTIONS:---max-old-space-size=400}\" next start",
     "lint": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",

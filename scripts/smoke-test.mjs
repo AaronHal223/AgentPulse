@@ -32,6 +32,13 @@ async function main() {
   await req("/login");
   await req("/signup");
   await req("/api/health");
+  const live = await req("/api/live");
+  for (const h of ["strict-transport-security", "x-frame-options", "x-content-type-options"]) {
+    if (!live.headers.get(h)) {
+      failures++;
+      console.log(`✗ missing security header ${h}`);
+    }
+  }
   const manifest = await (await req("/manifest.webmanifest")).json();
   if (!manifest.icons?.length || manifest.display !== "standalone") {
     failures++;
@@ -63,6 +70,37 @@ async function main() {
     await req(`/api/buyers/${id}`, { method: "DELETE" });
   }
   await req("/api/settings", { method: "PATCH", body: { briefEnabled: false } });
+
+  // A login cookie for an account that no longer exists must not trap the browser in a redirect loop.
+  if (process.env.AUTH_SECRET) {
+    const { SignJWT } = await import("jose");
+    const token = await new SignJWT({ sub: "account-that-does-not-exist" })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt()
+      .setExpirationTime("1h")
+      .sign(new TextEncoder().encode(process.env.AUTH_SECRET));
+    cookie = `ap_session=${token}`;
+    const dash = await req("/dashboard", { expect: [303, 307, 308] });
+    const to = dash.headers.get("location") || "";
+    if (!to.includes("/api/auth/expired")) {
+      failures++;
+      console.log(`✗ stale login should go to /api/auth/expired, went to ${to}`);
+    }
+    const exp = await req("/api/auth/expired", { expect: 307 });
+    if (!(exp.headers.get("location") || "").includes("/login") || !/ap_session=;|Max-Age=0|Expires=Thu, 01 Jan 1970/i.test(exp.headers.get("set-cookie") || "")) {
+      failures++;
+      console.log("✗ /api/auth/expired should clear the cookie and send to /login");
+    }
+    cookie = "";
+  }
+
+  // Password guessing gets blocked.
+  const victim = `guess-${Date.now()}@example.com`;
+  for (let i = 0; i < 10; i++) await req("/api/auth/login", { method: "POST", body: { email: victim, password: `wrong-${i}` }, expect: 401 });
+  await req("/api/auth/login", { method: "POST", body: { email: victim, password: "wrong-again" }, expect: 429 });
+
+  // Cron endpoints refuse requests without the secret.
+  await req("/api/cron/send-briefs", { expect: [401, 503] });
 
   if (failures) {
     console.log(`\n${failures} check(s) failed`);
