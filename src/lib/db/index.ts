@@ -2,14 +2,14 @@ import "server-only";
 import { drizzle as drizzlePg, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
-import { allowLocalDb, dbSsl, MISSING_DB_MESSAGE } from "../env";
+import { allowLocalDb, cleanDbUrl, dbSsl, MISSING_DB_MESSAGE } from "../env";
 
 export type DB = PostgresJsDatabase<typeof schema>;
 
 const globalForDb = globalThis as unknown as { __agentpulseDb?: Promise<DB> };
 
 async function init(): Promise<DB> {
-  const url = process.env.DATABASE_URL;
+  const url = process.env.DATABASE_URL ? cleanDbUrl(process.env.DATABASE_URL) : undefined;
   if (url) {
     // Production / hosted Postgres. On Neon, DATABASE_URL is the pooled (-pooler) string — right for
     // app traffic; migrations use DATABASE_URL_UNPOOLED. `npm run build` creates the tables.

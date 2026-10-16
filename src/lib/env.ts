@@ -35,5 +35,19 @@ export function dbSsl(url: string): "require" | "prefer" | false {
   }
 }
 
+/**
+ * Neon's copy-paste strings include `channel_binding=require`, which the postgres.js driver
+ * would forward to the server as an unknown setting and fail. TLS stays enforced by `dbSsl`.
+ */
+export function cleanDbUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    u.searchParams.delete("channel_binding");
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
 export const MISSING_DB_MESSAGE =
   "DATABASE_URL is not set. AgentPulse needs a permanent hosted database in production — create a free one at https://neon.tech and paste its connection string into DATABASE_URL (see README).";
