@@ -1,5 +1,4 @@
 import "server-only";
-import type Anthropic from "@anthropic-ai/sdk";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, schema } from "../db";
@@ -7,7 +6,7 @@ import type { Agent, Buyer, Match } from "../db/schema";
 import { stripNulls } from "../buyers";
 import { profileForPrompt } from "../profile";
 import { distancesFrom, geocode, geocodeAnchors } from "../geo";
-import { runAgentLoop, webFetchTool, webSearchTool } from "./claude";
+import { runAgent, type ToolSpec } from "./provider";
 
 const listingProps = {
   url: { type: "string", description: "Direct URL of the listing page you found." },
@@ -49,17 +48,17 @@ const listingProps = {
   areaNote: { type: "string", description: "One sentence on how the location fits the target areas and important places." },
 } as const;
 
-const reportTool: Anthropic.Messages.Tool = {
+const reportTool: ToolSpec = {
   name: "report_listings",
   description: "Report the listings you found and evaluated. Call exactly once at the end.",
-  input_schema: {
+  schema: {
     type: "object",
     properties: {
       listings: {
         type: "array",
         items: {
           type: "object",
-          properties: listingProps as unknown as Record<string, unknown>,
+          properties: listingProps,
           required: ["url", "summary", "blurb", "score", "reasoning", "inArea"],
         },
       },
@@ -227,6 +226,24 @@ function parseListings(raw: unknown): Listing[] {
   return out;
 }
 
+const siteOf = (url: string) => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+};
+
+/**
+ * When the AI reports which pages it really looked at, keep only listings on those sites, so a
+ * made-up link never reaches the agent.
+ */
+function onPagesFound(listings: Listing[], sources?: string[]): Listing[] {
+  if (!sources) return listings;
+  const sites = new Set(sources.map(siteOf).filter(Boolean));
+  return listings.filter((l) => sites.has(siteOf(l.url)));
+}
+
 /** Searches the web for homes for one buyer, scores them and saves new matches. */
 export async function searchHomesForBuyer(
   agent: Agent,
@@ -250,7 +267,7 @@ export async function searchHomesForBuyer(
 
   let raw: unknown = [];
   let notes: string | undefined;
-  await runAgentLoop({
+  const { sources } = await runAgent({
     system: searchSystem(agent),
     messages: [
       {
@@ -258,10 +275,11 @@ export async function searchHomesForBuyer(
         content: `Find up to ${max} homes ${buyer.intent === "rent" ? "for RENT" : "for SALE"} for this client and evaluate each one.\n\n<client>\n${profileForPrompt(buyer)}\n</client>${knownList}`,
       },
     ],
-    tools: [reportTool, webSearchTool(12), webFetchTool(12)],
+    tools: [reportTool],
+    web: { searches: 12, pageReads: 12 },
     maxTokens: 16000,
     maxSteps: 20,
-    requireTool: "report_listings",
+    finalTool: "report_listings",
     onClientTool: async (name, input) => {
       if (name !== "report_listings") return { result: `Unknown tool ${name}` };
       raw = (input as { listings?: unknown }).listings;
@@ -270,7 +288,15 @@ export async function searchHomesForBuyer(
     },
   });
 
-  const matches = await enrichAndSave(buyer, parseListings(raw), "search");
+  const found = parseListings(raw);
+  const confirmed = onPagesFound(found, sources);
+  if (confirmed.length < found.length) {
+    const skipped = found.length - confirmed.length;
+    notes = [notes, `Skipped ${skipped} result${skipped === 1 ? "" : "s"} whose link couldn't be confirmed.`]
+      .filter(Boolean)
+      .join(" ");
+  }
+  const matches = await enrichAndSave(buyer, confirmed, "search");
   await db.update(schema.buyers).set({ lastSearchedAt: new Date() }).where(eq(schema.buyers.id, buyer.id));
   return { matches, notes };
 }
@@ -278,7 +304,7 @@ export async function searchHomesForBuyer(
 /** Evaluates one specific listing link (Zillow, Redfin, anything) for a buyer. */
 export async function analyzeListingLink(agent: Agent, buyer: Buyer, url: string): Promise<Match | null> {
   let raw: unknown = [];
-  await runAgentLoop({
+  await runAgent({
     system: searchSystem(agent),
     messages: [
       {
@@ -292,10 +318,11 @@ ${profileForPrompt(buyer)}
 </client>`,
       },
     ],
-    tools: [reportTool, webFetchTool(4), webSearchTool(4)],
+    tools: [reportTool],
+    web: { searches: 4, pageReads: 4 },
     maxTokens: 6000,
     maxSteps: 10,
-    requireTool: "report_listings",
+    finalTool: "report_listings",
     onClientTool: async (name, input) => {
       if (name !== "report_listings") return { result: `Unknown tool ${name}` };
       raw = (input as { listings?: unknown }).listings;

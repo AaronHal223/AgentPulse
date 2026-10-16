@@ -1,23 +1,22 @@
 import "server-only";
-import type Anthropic from "@anthropic-ai/sdk";
 import { getDb, schema } from "../db";
 import type { Agent, Buyer } from "../db/schema";
 import { stripNulls } from "../buyers";
 import { ProfilePatch, patchToUpdate, profileFieldsJsonSchema } from "../profile";
-import { runAgentLoop, webFetchTool } from "./claude";
+import { runAgent, type ToolSpec } from "./provider";
 
-const createBuyersTool: Anthropic.Messages.Tool = {
+const createBuyersTool: ToolSpec = {
   name: "create_buyer_profiles",
   description:
     "Create one buyer/renter profile per distinct client found in the imported material. Call this exactly once with every client.",
-  input_schema: {
+  schema: {
     type: "object",
     properties: {
       buyers: {
         type: "array",
         items: {
           type: "object",
-          properties: profileFieldsJsonSchema as unknown as Record<string, unknown>,
+          properties: profileFieldsJsonSchema,
           required: ["name"],
         },
       },
@@ -40,12 +39,14 @@ Extract every distinct client and call create_buyer_profiles once. Rules:
 
 export async function importBuyers(agent: Agent, material: string): Promise<Buyer[]> {
   let raw: unknown[] = [];
-  await runAgentLoop({
+  await runAgent({
     system: SYSTEM,
     messages: [{ role: "user", content: `Import these clients:\n\n<material>\n${material}\n</material>` }],
-    tools: [createBuyersTool, webFetchTool(5)],
+    tools: [createBuyersTool],
+    // Only read pages when the material actually has links in it.
+    web: /https?:\/\//i.test(material) ? { searches: 0, pageReads: 5 } : undefined,
     maxTokens: 32000,
-    requireTool: "create_buyer_profiles",
+    finalTool: "create_buyer_profiles",
     onClientTool: async (name, input) => {
       if (name === "create_buyer_profiles") {
         raw = ((input as { buyers?: unknown[] }).buyers ?? []) as unknown[];

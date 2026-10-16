@@ -2,13 +2,15 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { authSecretOk } from "@/lib/session";
+import { aiConfigured, aiProvider } from "@/lib/ai/provider";
 
 export const dynamic = "force-dynamic";
 
 /** Full check: the app is up, the database answers and required settings are present. */
 export async function GET() {
   const config = {
-    ai: Boolean(process.env.ANTHROPIC_API_KEY),
+    aiProvider: aiProvider(),
+    ai: aiConfigured(),
     driveTimes: Boolean(process.env.ORS_API_KEY),
     email: Boolean(process.env.RESEND_API_KEY),
     authSecret: authSecretOk(),

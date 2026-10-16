@@ -22,8 +22,12 @@ services:
         generateValue: true
       - key: SIGNUP_CODE
         sync: false # invite code people need to create an account
-      - key: ANTHROPIC_API_KEY
+      - key: AI_PROVIDER
+        value: gemini # change to claude when you go live
+      - key: GEMINI_API_KEY
         sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false # only needed when AI_PROVIDER=claude
       - key: ORS_API_KEY
         sync: false
       - key: RESEND_API_KEY
