@@ -11,7 +11,8 @@ const globalForDb = globalThis as unknown as { __agentpulseDb?: Promise<DB> };
 async function init(): Promise<DB> {
   const url = process.env.DATABASE_URL;
   if (url) {
-    // Production / hosted Postgres (Neon, Supabase, RDS...). `npm run build` creates the tables.
+    // Production / hosted Postgres. On Neon, DATABASE_URL is the pooled (-pooler) string — right for
+    // app traffic; migrations use DATABASE_URL_UNPOOLED. `npm run build` creates the tables.
     const client = postgres(url, {
       max: 5,
       prepare: false, // works with connection poolers (Neon's -pooler host)

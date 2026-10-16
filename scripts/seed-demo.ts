@@ -3,6 +3,7 @@
  * without any API keys. All data is made up.
  *   npm run seed:demo   → log in as demo@agentpulse.dev / demo1234
  */
+import "./load-env";
 import path from "node:path";
 import fs from "node:fs";
 import bcrypt from "bcryptjs";
@@ -12,11 +13,12 @@ import { dbSsl } from "../src/lib/env";
 
 async function connect() {
   const migrationsFolder = path.join(process.cwd(), "drizzle");
-  if (process.env.DATABASE_URL) {
+  const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
+  if (url) {
     const postgres = (await import("postgres")).default;
     const { drizzle } = await import("drizzle-orm/postgres-js");
     const { migrate } = await import("drizzle-orm/postgres-js/migrator");
-    const client = postgres(process.env.DATABASE_URL, { max: 1, prepare: false, ssl: dbSsl(process.env.DATABASE_URL) });
+    const client = postgres(url, { max: 1, prepare: false, ssl: dbSsl(url) });
     const db = drizzle(client, { schema });
     await migrate(db, { migrationsFolder });
     return { db, close: () => client.end() };
