@@ -21,13 +21,13 @@ type Props = {
   clientReaction?: { verdict: string; note: string | null };
   /** Feedback on one home can move other homes' scores; the list updates them here. */
   onRescored?: (rescored: Rescored[]) => void;
-  /** Lets the list keep its tab counts right when a home is saved, rejected or restored. */
-  onStatus?: (id: string, status: string) => void;
+  /** Tells the list what changed on this home (saved, rejected, sent) so its own copy stays current. */
+  onUpdate?: (id: string, change: Partial<Match>) => void;
 };
 
 const message = (err: unknown) => (err instanceof Error ? err.message : "That didn't go through. Please try again.");
 
-export function MatchCard({ match, buyerName, rejectedFor = [], clientReaction, onRescored, onStatus }: Props) {
+export function MatchCard({ match, buyerName, rejectedFor = [], clientReaction, onRescored, onUpdate }: Props) {
   const router = useRouter();
   const [status, setLocalStatus] = useState(match.status);
   const [sent, setSent] = useState(Boolean(match.sentAt));
@@ -38,7 +38,7 @@ export function MatchCard({ match, buyerName, rejectedFor = [], clientReaction, 
 
   function setStatus(next: string) {
     setLocalStatus(next);
-    onStatus?.(match.id, next);
+    onUpdate?.(match.id, { status: next });
   }
 
   function applyRescored(rescored: Rescored[]) {
@@ -69,7 +69,8 @@ export function MatchCard({ match, buyerName, rejectedFor = [], clientReaction, 
     try {
       const res = await api<{ rescored: Rescored[] }>(`/api/matches/${match.id}/send`, { method: "POST" });
       setSent(true);
-      setStatus("saved");
+      setLocalStatus("saved");
+      onUpdate?.(match.id, { status: "saved", sentAt: new Date() });
       applyRescored(res.rescored);
       if (how === "copied") setNotice("Copied. Paste it into a text or email to your client.");
     } catch (err) {
@@ -81,6 +82,7 @@ export function MatchCard({ match, buyerName, rejectedFor = [], clientReaction, 
     setSent(false);
     try {
       await api(`/api/matches/${match.id}/send`, { method: "DELETE" });
+      onUpdate?.(match.id, { sentAt: null });
     } catch (err) {
       setSent(true);
       setNotice(message(err));
