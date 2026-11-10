@@ -4,10 +4,12 @@ import { Sparkles, UserPlus } from "lucide-react";
 import { requireAgent } from "@/lib/auth";
 import { getDb, schema } from "@/lib/db";
 import { getBriefGroups } from "@/lib/brief";
+import { recentClientReactions } from "@/lib/feedback";
 import { budgetLabel } from "@/lib/profile";
 import { MatchCard } from "@/components/MatchCard";
 import { RunSearchesButton } from "@/components/RunSearchesButton";
 import { EmailBriefButton } from "@/components/EmailBriefButton";
+import { ClientReactions } from "@/components/ClientReactions";
 
 function greeting() {
   const h = Number(new Date().toLocaleString("en-US", { hour: "numeric", hour12: false, timeZone: process.env.APP_TIMEZONE || "America/New_York" }));
@@ -17,7 +19,7 @@ function greeting() {
 export default async function Dashboard() {
   const agent = await requireAgent();
   const db = await getDb();
-  const [buyers, groups, [{ total }]] = await Promise.all([
+  const [buyers, groups, [{ total }], reactions] = await Promise.all([
     db.select().from(schema.buyers).where(and(eq(schema.buyers.agentId, agent.id), eq(schema.buyers.active, true))),
     getBriefGroups(agent.id, 24),
     db
@@ -25,6 +27,7 @@ export default async function Dashboard() {
       .from(schema.matches)
       .innerJoin(schema.buyers, eq(schema.matches.buyerId, schema.buyers.id))
       .where(and(eq(schema.buyers.agentId, agent.id), eq(schema.matches.status, "saved"))),
+    recentClientReactions(agent.id),
   ]);
 
   const newCount = groups.reduce((n, g) => n + g.matches.length, 0);
@@ -68,6 +71,8 @@ export default async function Dashboard() {
           </div>
         ))}
       </div>
+
+      <ClientReactions reactions={reactions} />
 
       {!buyers.length && (
         <div className="card flex flex-col items-center px-6 py-14 text-center">

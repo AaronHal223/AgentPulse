@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gte } from "drizzle-orm";
 import { getDb, schema } from "./db";
 import type { Buyer, Match } from "./db/schema";
 import { HttpError } from "./errors";
@@ -111,6 +111,13 @@ export async function setAgentVerdict(
   return rescoreBuyer(match.buyerId);
 }
 
+/** The client's thumbs-up / thumbs-down (and optional note) from their private page. */
+export async function setClientVerdict(match: Match, verdict: "liked" | "disliked" | null, note?: string | null) {
+  if (verdict) await saveFeedback(match, "client", { verdict, note });
+  else await clearFeedback(match.id, "client");
+  await rescoreBuyer(match.buyerId);
+}
+
 /**
  * Marks a home as sent to the client. Sending is a vote of confidence, so a home the agent
  * hasn't judged yet is saved too.
@@ -126,4 +133,20 @@ export async function markSent(match: Match): Promise<{ sentAt: Date; rescored: 
 export async function unmarkSent(match: Match) {
   const db = await getDb();
   await db.update(schema.matches).set({ sentAt: null }).where(eq(schema.matches.id, match.id));
+}
+
+export type ClientReaction = { feedback: typeof schema.matchFeedback.$inferSelect; match: Match; buyer: Buyer };
+
+/** What this agent's clients said on their private pages lately, newest first. */
+export async function recentClientReactions(agentId: string, days = 14, max = 8): Promise<ClientReaction[]> {
+  const db = await getDb();
+  const since = new Date(Date.now() - days * 24 * 3600 * 1000);
+  return db
+    .select({ feedback: schema.matchFeedback, match: schema.matches, buyer: schema.buyers })
+    .from(schema.matchFeedback)
+    .innerJoin(schema.matches, eq(schema.matchFeedback.matchId, schema.matches.id))
+    .innerJoin(schema.buyers, eq(schema.matchFeedback.buyerId, schema.buyers.id))
+    .where(and(eq(schema.buyers.agentId, agentId), eq(schema.matchFeedback.source, "client"), gte(schema.matchFeedback.createdAt, since)))
+    .orderBy(desc(schema.matchFeedback.createdAt))
+    .limit(max);
 }

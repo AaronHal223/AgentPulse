@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Car, Check, Copy, MapPinOff } from "lucide-react";
+import { Car, Check, Copy, MapPinOff, ThumbsDown, ThumbsUp } from "lucide-react";
 import type { Match } from "@/lib/db/schema";
 import type { RejectReason, Rescored } from "@/lib/scoring";
 import { distanceText, factsLine, formatPrice } from "@/lib/format";
@@ -16,6 +16,8 @@ type Props = {
   buyerName?: string;
   /** Why it was rejected earlier, if it was. */
   rejectedFor?: string[];
+  /** The client's reaction from their private page, if they left one. */
+  clientReaction?: { verdict: string; note: string | null };
   /** Feedback on one home can move other homes' scores; the list updates them here. */
   onRescored?: (rescored: Rescored[]) => void;
   /** Lets the list keep its tab counts right when a home is saved, rejected or restored. */
@@ -24,7 +26,7 @@ type Props = {
 
 const message = (err: unknown) => (err instanceof Error ? err.message : "That didn't go through. Please try again.");
 
-export function MatchCard({ match, buyerName, rejectedFor = [], onRescored, onStatus }: Props) {
+export function MatchCard({ match, buyerName, rejectedFor = [], clientReaction, onRescored, onStatus }: Props) {
   const router = useRouter();
   const [status, setLocalStatus] = useState(match.status);
   const [sent, setSent] = useState(Boolean(match.sentAt));
@@ -142,6 +144,8 @@ export function MatchCard({ match, buyerName, rejectedFor = [], onRescored, onSt
             </div>
           )}
 
+          {clientReaction && <ClientReactionNote {...clientReaction} />}
+
           <p className="mt-3 text-sm leading-relaxed text-ink-soft">{match.summary}</p>
 
           <div className="mt-3 rounded-lg bg-brand-soft/60 p-3">
@@ -170,5 +174,19 @@ export function MatchCard({ match, buyerName, rejectedFor = [], onRescored, onSt
         </div>
       </div>
     </article>
+  );
+}
+
+function ClientReactionNote({ verdict, note }: { verdict: string; note: string | null }) {
+  const liked = verdict === "liked";
+  const Icon = liked ? ThumbsUp : ThumbsDown;
+  return (
+    <p className={`mt-3 flex items-start gap-2 rounded-lg px-3 py-2 text-sm ${liked ? "bg-brand-soft text-brand" : "bg-rust-soft text-rust"}`}>
+      <Icon size={15} className="mt-0.5 shrink-0" />
+      <span>
+        <span className="font-semibold">{liked ? "Your client likes this one." : "Your client passed on this one."}</span>
+        {note && <span className="text-ink"> “{note}”</span>}
+      </span>
+    </p>
   );
 }

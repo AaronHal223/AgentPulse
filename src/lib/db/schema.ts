@@ -163,9 +163,32 @@ export const matchFeedback = pgTable(
   ],
 );
 
+/**
+ * A private page an agent shares with one client (no login). Only a hash of the link's token
+ * is searchable; the token itself is kept sealed so the agent can copy the link again.
+ */
+export const shareLinks = pgTable(
+  "share_links",
+  {
+    id: id(),
+    buyerId: text("buyer_id")
+      .notNull()
+      .references(() => buyers.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    tokenSealed: text("token_sealed").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    lastViewedAt: timestamp("last_viewed_at", { withTimezone: true }),
+    viewCount: integer("view_count").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("share_links_buyer_idx").on(t.buyerId)],
+);
+
 export type Agent = typeof agents.$inferSelect;
 export type Buyer = typeof buyers.$inferSelect;
 export type NewBuyer = typeof buyers.$inferInsert;
 export type Match = typeof matches.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type MatchFeedback = typeof matchFeedback.$inferSelect;
+export type ShareLink = typeof shareLinks.$inferSelect;

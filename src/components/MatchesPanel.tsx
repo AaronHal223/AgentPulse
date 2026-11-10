@@ -84,6 +84,11 @@ export function MatchesPanel({ buyer, initial, feedback }: Props) {
     [feedback],
   );
 
+  const clientReactions = useMemo(
+    () => new Map(feedback.filter((f) => f.source === "client").map((f) => [f.matchId, { verdict: f.verdict, note: f.note }])),
+    [feedback],
+  );
+
   const visible = useMemo(() => {
     const list = matches.filter((m) =>
       filter === "saved" ? m.status === "saved" : filter === "outside" ? !m.inArea : m.inArea,
@@ -168,7 +173,14 @@ export function MatchesPanel({ buyer, initial, feedback }: Props) {
       ) : (
         <div className="space-y-3">
           {visible.map((m) => (
-            <MatchCard key={m.id} match={m} rejectedFor={rejectReasons.get(m.id)} onRescored={applyRescored} onStatus={applyStatus} />
+            <MatchCard
+              key={m.id}
+              match={m}
+              rejectedFor={rejectReasons.get(m.id)}
+              clientReaction={clientReactions.get(m.id)}
+              onRescored={applyRescored}
+              onStatus={applyStatus}
+            />
           ))}
         </div>
       )}
