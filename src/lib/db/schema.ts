@@ -237,6 +237,26 @@ export const pushSubscriptions = pgTable(
   (t) => [index("push_subscriptions_agent_idx").on(t.agentId)],
 );
 
+/**
+ * What the agent said after a showing, and the profile changes the AI suggested from it.
+ * Nothing reaches the profile until the agent confirms.
+ */
+export const voiceNotes = pgTable(
+  "voice_notes",
+  {
+    id: id(),
+    buyerId: text("buyer_id")
+      .notNull()
+      .references(() => buyers.id, { onDelete: "cascade" }),
+    transcript: text("transcript").notNull(),
+    proposal: jsonb("proposal").$type<Record<string, unknown>>().notNull().default({}),
+    appliedFields: jsonb("applied_fields").$type<string[]>().notNull().default([]),
+    appliedAt: timestamp("applied_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("voice_notes_buyer_idx").on(t.buyerId)],
+);
+
 export type Agent = typeof agents.$inferSelect;
 export type Buyer = typeof buyers.$inferSelect;
 export type NewBuyer = typeof buyers.$inferInsert;
@@ -246,3 +266,4 @@ export type MatchFeedback = typeof matchFeedback.$inferSelect;
 export type ShareLink = typeof shareLinks.$inferSelect;
 export type Alert = typeof alerts.$inferSelect;
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+export type VoiceNote = typeof voiceNotes.$inferSelect;

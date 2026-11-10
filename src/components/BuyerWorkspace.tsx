@@ -5,11 +5,25 @@ import { ProfilePanel } from "./ProfilePanel";
 import { ChatPanel } from "./ChatPanel";
 import { MatchesPanel } from "./MatchesPanel";
 import { ShareLinkPanel } from "./ShareLinkPanel";
+import { VoiceNote } from "./VoiceNote";
 
-type Props = { buyer: Buyer; messages: Message[]; matches: Match[]; feedback: MatchFeedback[] };
+type Props = {
+  buyer: Buyer;
+  messages: Message[];
+  matches: Match[];
+  feedback: MatchFeedback[];
+  canTranscribeAudio: boolean;
+};
 
-export function BuyerWorkspace({ buyer: initialBuyer, messages, matches, feedback }: Props) {
+export function BuyerWorkspace({ buyer: initialBuyer, messages, matches, feedback, canTranscribeAudio }: Props) {
   const [buyer, setBuyer] = useState(initialBuyer);
+  const [voiceMessages, setVoiceMessages] = useState<Message[]>([]);
+
+  function onVoiceNoteSaved(updated: Buyer, added: Message[]) {
+    setBuyer(updated);
+    setVoiceMessages(added);
+  }
+
   return (
     <div className="space-y-6">
       <h1 className="font-serif text-3xl font-semibold">{buyer.name}</h1>
@@ -17,7 +31,8 @@ export function BuyerWorkspace({ buyer: initialBuyer, messages, matches, feedbac
         <div className="space-y-6">
           <ProfilePanel buyer={buyer} onChange={setBuyer} />
           <ShareLinkPanel buyer={buyer} />
-          <ChatPanel buyer={buyer} initial={messages} onBuyer={setBuyer} />
+          <VoiceNote buyer={buyer} canTranscribeAudio={canTranscribeAudio} onSaved={onVoiceNoteSaved} />
+          <ChatPanel buyer={buyer} initial={messages} added={voiceMessages} onBuyer={setBuyer} />
         </div>
         <MatchesPanel buyer={buyer} initial={matches} feedback={feedback} />
       </div>

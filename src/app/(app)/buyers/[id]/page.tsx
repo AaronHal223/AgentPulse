@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { requireAgent } from "@/lib/auth";
 import { getDb, schema } from "@/lib/db";
+import { aiHearsAudio } from "@/lib/ai/provider";
 import { BuyerWorkspace } from "@/components/BuyerWorkspace";
 
 export default async function BuyerPage({ params }: { params: Promise<{ id: string }> }) {
@@ -26,7 +27,7 @@ export default async function BuyerPage({ params }: { params: Promise<{ id: stri
     <div>
       <Link href="/buyers" className="text-sm text-muted hover:text-ink">← All clients</Link>
       <div className="mt-2">
-        <BuyerWorkspace buyer={buyer} messages={messages.slice(-60)} matches={matches} feedback={feedback} />
+        <BuyerWorkspace buyer={buyer} messages={messages.slice(-60)} matches={matches} feedback={feedback} canTranscribeAudio={aiHearsAudio()} />
       </div>
     </div>
   );

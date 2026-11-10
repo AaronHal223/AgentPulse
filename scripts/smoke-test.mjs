@@ -116,6 +116,10 @@ async function main() {
     await req(`/api/buyers/${id}`, { method: "PATCH", body: { mustHaves: ["Yard"], budgetMin: null } });
     for (const p of ["/dashboard", "/buyers", "/buyers/new", `/buyers/${id}`, "/alerts", "/settings"]) await req(p);
     await alertChecks();
+    // Voice notes: bad input is refused before any AI is called, and other agents' clients don't exist.
+    await req(`/api/buyers/${id}/voice-notes`, { method: "POST", body: { transcript: "" }, expect: 400 });
+    await req(`/api/buyers/${id}/voice-notes/not-a-note/confirm`, { method: "POST", body: { fields: [] }, expect: 404 });
+    await req("/api/buyers/not-my-client/voice-notes", { method: "POST", body: { transcript: "hello there" }, expect: 404 });
     // Home feedback routes only answer for homes the agent owns.
     await req("/api/matches/not-a-real-home", { method: "PATCH", body: { status: "saved" }, expect: 404 });
     await req("/api/matches/not-a-real-home/why", { expect: 404 });
@@ -160,6 +164,8 @@ async function main() {
   await req("/api/alerts", { expect: 401 });
   await req("/api/push", { method: "POST", body: {}, expect: 401 });
   await req("/api/buyers/anything/recheck", { method: "POST", expect: 401 });
+  await req("/api/buyers/anything/voice-notes", { method: "POST", body: { transcript: "hello there" }, expect: 401 });
+  await req("/api/buyers/anything/voice-notes/transcribe", { method: "POST", body: {}, expect: 401 });
 
   // Cron endpoints refuse requests without the secret.
   await req("/api/cron/send-briefs", { expect: [401, 503] });

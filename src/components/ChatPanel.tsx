@@ -12,12 +12,24 @@ const STARTERS = [
   "Where should they look if they want good schools and a short commute?",
 ];
 
-export function ChatPanel({ buyer, initial, onBuyer }: { buyer: Buyer; initial: Message[]; onBuyer: (b: Buyer) => void }) {
+type Props = {
+  buyer: Buyer;
+  initial: Message[];
+  /** Messages saved elsewhere on the page (a confirmed voice note) to add to the conversation. */
+  added?: Message[];
+  onBuyer: (b: Buyer) => void;
+};
+
+export function ChatPanel({ buyer, initial, added, onBuyer }: Props) {
   const [msgs, setMsgs] = useState<ChatMsg[]>(initial);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (added?.length) setMsgs((m) => [...m, ...added.filter((a) => !m.some((x) => x.id === a.id))]);
+  }, [added]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "nearest" });
