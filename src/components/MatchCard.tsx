@@ -1,38 +1,102 @@
 "use client";
 import { useState } from "react";
-import { Bookmark, BookmarkCheck, Car, Check, Copy, ExternalLink, MapPinOff, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Car, Check, Copy, MapPinOff } from "lucide-react";
 import type { Match } from "@/lib/db/schema";
+import type { RejectReason, Rescored } from "@/lib/scoring";
 import { distanceText, factsLine, formatPrice } from "@/lib/format";
 import { ScoreBadge } from "./ScoreBadge";
+import { MatchActions } from "./MatchActions";
+import { WhyScore } from "./WhyScore";
+import { shareText } from "./share";
 import { api } from "./fetcher";
 
-export function MatchCard({ match, buyerName }: { match: Match; buyerName?: string }) {
-  const [status, setStatus] = useState(match.status);
-  const [copied, setCopied] = useState(false);
-  const [open, setOpen] = useState(false);
+type Props = {
+  match: Match;
+  buyerName?: string;
+  /** Why it was rejected earlier, if it was. */
+  rejectedFor?: string[];
+  /** Feedback on one home can move other homes' scores; the list updates them here. */
+  onRescored?: (rescored: Rescored[]) => void;
+  /** Lets the list keep its tab counts right when a home is saved, rejected or restored. */
+  onStatus?: (id: string, status: string) => void;
+};
 
-  async function setTo(next: "new" | "saved" | "dismissed") {
-    const prev = status;
+const message = (err: unknown) => (err instanceof Error ? err.message : "That didn't go through. Please try again.");
+
+export function MatchCard({ match, buyerName, rejectedFor = [], onRescored, onStatus }: Props) {
+  const router = useRouter();
+  const [status, setLocalStatus] = useState(match.status);
+  const [sent, setSent] = useState(Boolean(match.sentAt));
+  const [reasons, setReasons] = useState(rejectedFor);
+  const [whyOpen, setWhyOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [notice, setNotice] = useState("");
+
+  function setStatus(next: string) {
+    setLocalStatus(next);
+    onStatus?.(match.id, next);
+  }
+
+  function applyRescored(rescored: Rescored[]) {
+    if (onRescored) onRescored(rescored);
+    else if (rescored.length) router.refresh();
+  }
+
+  async function setTo(next: "new" | "saved" | "dismissed", picked: RejectReason[] = []) {
+    const before = { status, reasons };
     setStatus(next);
+    setReasons(picked);
+    setNotice("");
     try {
-      await api(`/api/matches/${match.id}`, { method: "PATCH", body: { status: next } });
-    } catch {
-      setStatus(prev);
+      const res = await api<{ rescored: Rescored[] }>(`/api/matches/${match.id}`, { method: "PATCH", body: { status: next, reasons: picked } });
+      applyRescored(res.rescored);
+    } catch (err) {
+      setStatus(before.status);
+      setReasons(before.reasons);
+      setNotice(message(err));
+    }
+  }
+
+  async function send() {
+    setNotice("");
+    const how = await shareText(`${match.blurb}\n${match.url}`);
+    if (how === "cancelled") return;
+    if (how === "failed") return setNotice("Couldn't open sharing on this device. Use the copy button on the blurb instead.");
+    try {
+      const res = await api<{ rescored: Rescored[] }>(`/api/matches/${match.id}/send`, { method: "POST" });
+      setSent(true);
+      setStatus("saved");
+      applyRescored(res.rescored);
+      if (how === "copied") setNotice("Copied. Paste it into a text or email to your client.");
+    } catch (err) {
+      setNotice(message(err));
+    }
+  }
+
+  async function unsend() {
+    setSent(false);
+    try {
+      await api(`/api/matches/${match.id}/send`, { method: "DELETE" });
+    } catch (err) {
+      setSent(true);
+      setNotice(message(err));
     }
   }
 
   async function copyBlurb() {
-    const text = `${match.blurb}\n${match.url}`;
-    await navigator.clipboard.writeText(text).catch(() => {});
+    await navigator.clipboard.writeText(`${match.blurb}\n${match.url}`).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }
 
   if (status === "dismissed") {
     return (
-      <div className="flex items-center justify-between rounded-xl border border-dashed border-line px-4 py-3 text-sm text-muted">
-        <span className="truncate">Dismissed: {match.address || match.url}</span>
-        <button onClick={() => setTo("new")} className="font-medium text-ink hover:underline">
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-dashed border-line px-4 py-3 text-sm text-muted">
+        <span className="truncate">
+          Rejected{reasons.length ? ` (${reasons.join(", ")})` : ""}: {match.address || match.url}
+        </span>
+        <button onClick={() => setTo("new")} className="shrink-0 font-medium text-ink hover:underline">
           Undo
         </button>
       </div>
@@ -44,7 +108,7 @@ export function MatchCard({ match, buyerName }: { match: Match; buyerName?: stri
 
   return (
     <article className="card overflow-hidden">
-      <div className="flex gap-4 p-4 sm:p-5">
+      <div className="flex gap-3 p-4 sm:gap-4 sm:p-5">
         <ScoreBadge score={match.score} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
@@ -83,67 +147,26 @@ export function MatchCard({ match, buyerName }: { match: Match; buyerName?: stri
           <div className="mt-3 rounded-lg bg-brand-soft/60 p-3">
             <div className="flex items-start justify-between gap-3">
               <p className="text-sm leading-relaxed text-ink">“{match.blurb}”</p>
-              <button onClick={copyBlurb} className="shrink-0 text-brand hover:text-ink" title="Copy blurb + link to send to your client">
+              <button onClick={copyBlurb} className="shrink-0 text-brand hover:text-ink" title="Copy blurb + link to send to your client" aria-label="Copy blurb and link">
                 {copied ? <Check size={16} /> : <Copy size={16} />}
               </button>
             </div>
           </div>
 
-          {open && (
-            <div className="mt-3 space-y-3 text-sm">
-              <p className="text-ink-soft">
-                <span className="font-semibold text-ink">Why {match.score}/10: </span>
-                {match.reasoning}
-              </p>
-              {match.areaNote && (
-                <p className="text-ink-soft">
-                  <span className="font-semibold text-ink">Location: </span>
-                  {match.areaNote}
-                </p>
-              )}
-              <div className="grid gap-3 sm:grid-cols-2">
-                {match.pros.length > 0 && (
-                  <ul className="space-y-1">
-                    {match.pros.map((p) => (
-                      <li key={p} className="flex gap-2 text-ink-soft">
-                        <span className="text-brand">+</span>
-                        {p}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {match.cons.length > 0 && (
-                  <ul className="space-y-1">
-                    {match.cons.map((c) => (
-                      <li key={c} className="flex gap-2 text-ink-soft">
-                        <span className="text-rust">−</span>
-                        {c}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-          )}
+          {whyOpen && <WhyScore match={match} />}
 
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <a href={match.url} target="_blank" rel="noreferrer" className="btn-ghost !px-3 !py-1.5">
-              <ExternalLink size={14} /> View listing
-            </a>
-            <button onClick={() => setOpen((o) => !o)} className="btn-ghost !px-3 !py-1.5">
-              {open ? "Hide details" : "Why this score"}
-            </button>
-            <button
-              onClick={() => setTo(status === "saved" ? "new" : "saved")}
-              className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold transition ${status === "saved" ? "bg-brand text-white" : "border border-line bg-card text-ink hover:border-ink"}`}
-            >
-              {status === "saved" ? <BookmarkCheck size={14} /> : <Bookmark size={14} />}
-              {status === "saved" ? "Saved" : "Save"}
-            </button>
-            <button onClick={() => setTo("dismissed")} className="ml-auto inline-flex items-center gap-1 text-sm text-muted hover:text-rust">
-              <X size={14} /> Dismiss
-            </button>
-          </div>
+          <MatchActions
+            url={match.url}
+            saved={status === "saved"}
+            sent={sent}
+            whyOpen={whyOpen}
+            onToggleWhy={() => setWhyOpen((o) => !o)}
+            onSave={() => setTo(status === "saved" ? "new" : "saved")}
+            onSend={send}
+            onUnsend={unsend}
+            onReject={(picked) => setTo("dismissed", picked)}
+          />
+          {notice && <p className="mt-2 text-sm text-ink-soft" role="status">{notice}</p>}
         </div>
       </div>
     </article>
