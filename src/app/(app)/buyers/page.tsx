@@ -5,7 +5,9 @@ import { requireAgent } from "@/lib/auth";
 import { getDb, schema } from "@/lib/db";
 import { budgetLabel } from "@/lib/profile";
 import { timeAgo } from "@/lib/format";
+import { clientPulses } from "@/lib/pulse-data";
 import { ScoreBadge } from "@/components/ScoreBadge";
+import { PulseMeter } from "@/components/PulseMeter";
 
 export default async function BuyersPage() {
   const agent = await requireAgent();
@@ -21,6 +23,7 @@ export default async function BuyersPage() {
     .where(eq(schema.buyers.agentId, agent.id))
     .groupBy(schema.buyers.id)
     .orderBy(desc(schema.buyers.active), desc(schema.buyers.updatedAt));
+  const pulses = new Map((await clientPulses(agent.id)).map((p) => [p.buyer.id, p.pulse]));
 
   return (
     <div className="space-y-6">
@@ -67,9 +70,12 @@ export default async function BuyersPage() {
                     <MapPin size={13} className="shrink-0" /> {buyer.areas.join(", ")}
                   </p>
                 )}
-                <p className="mt-2 text-xs text-muted">
-                  {matchCount} home{matchCount === 1 ? "" : "s"} · searched {timeAgo(buyer.lastSearchedAt)}
-                  {!buyer.active && " · paused"}
+                <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+                  <span>
+                    {matchCount} home{matchCount === 1 ? "" : "s"} · searched {timeAgo(buyer.lastSearchedAt)}
+                    {!buyer.active && " · paused"}
+                  </span>
+                  {pulses.has(buyer.id) && <PulseMeter pulse={pulses.get(buyer.id)!} />}
                 </p>
               </div>
             </Link>

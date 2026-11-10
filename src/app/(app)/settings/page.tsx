@@ -16,6 +16,7 @@ export default async function SettingsPage() {
           email: agent.email,
           brokerage: agent.brokerage ?? "",
           marketArea: agent.marketArea ?? "",
+          tone: agent.tone ?? "",
           briefEmail: agent.briefEmail ?? "",
           briefEnabled: agent.briefEnabled,
         }}

@@ -123,6 +123,12 @@ async function main() {
     // Map and commute: refreshing drive times works with no homes yet, and only for the agent's own client.
     await req(`/api/buyers/${id}/drive-times`, { method: "POST" });
     await req("/api/buyers/not-my-client/drive-times", { method: "POST", expect: 404 });
+    // Productivity tools: clear answers when there's nothing to work with, and nothing for other agents' clients.
+    await req(`/api/buyers/${id}/follow-up`, { method: "POST", body: { channel: "text" }, expect: 422 });
+    await req(`/api/buyers/${id}/follow-up`, { method: "POST", body: { channel: "fax" }, expect: 400 });
+    await req(`/api/buyers/${id}/tour`, { method: "POST", body: { matchIds: ["only-one"], startTime: "10:00", visitMinutes: 30 }, expect: 400 });
+    await req("/api/buyers/not-my-client/tour", { method: "POST", body: { matchIds: ["a", "b"], startTime: "10:00", visitMinutes: 30 }, expect: 404 });
+    await req("/report");
     // Home feedback routes only answer for homes the agent owns.
     await req("/api/matches/not-a-real-home", { method: "PATCH", body: { status: "saved" }, expect: 404 });
     await req("/api/matches/not-a-real-home/why", { expect: 404 });
@@ -170,6 +176,9 @@ async function main() {
   await req("/api/buyers/anything/voice-notes", { method: "POST", body: { transcript: "hello there" }, expect: 401 });
   await req("/api/buyers/anything/voice-notes/transcribe", { method: "POST", body: {}, expect: 401 });
   await req("/api/buyers/anything/drive-times", { method: "POST", expect: 401 });
+  await req("/api/buyers/anything/follow-up", { method: "POST", body: { channel: "text" }, expect: 401 });
+  await req("/api/buyers/anything/tour", { method: "POST", body: {}, expect: 401 });
+  await req("/report", { expect: 307 });
 
   // Cron endpoints refuse requests without the secret.
   await req("/api/cron/send-briefs", { expect: [401, 503] });

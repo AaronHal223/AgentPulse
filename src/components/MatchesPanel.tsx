@@ -1,14 +1,16 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { List, Map as MapIcon, RefreshCw } from "lucide-react";
+import { List, Map as MapIcon, RefreshCw, Route } from "lucide-react";
 import type { Anchor, Buyer, Match, MatchFeedback } from "@/lib/db/schema";
 import { commuteFit, defaultCommutePlaces, longestCommute } from "@/lib/commute";
+import { TOUR_MAX_STOPS } from "@/lib/tour";
 import type { Rescored } from "@/lib/scoring";
 import { CommuteControls, type CommuteSettings } from "./CommuteControls";
 import { HomeSearchBar } from "./HomeSearchBar";
 import { MapView } from "./MapView";
 import { MatchCard } from "./MatchCard";
+import { TourPlanner } from "./TourPlanner";
 import { api } from "./fetcher";
 
 type Filter = "all" | "saved" | "outside";
@@ -41,6 +43,8 @@ export function MatchesPanel({ buyer, initial, feedback }: Props) {
     maxMinutes: buyer.maxDriveMinutes,
     hideOver: false,
   });
+  // null while the tour planner is closed; otherwise the homes picked so far, in order.
+  const [tourIds, setTourIds] = useState<string[] | null>(null);
   const [working, setWorking] = useState<"" | "recheck" | "locate">("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -125,8 +129,19 @@ export function MatchesPanel({ buyer, initial, feedback }: Props) {
     outside: matches.filter((m) => !m.inArea && m.status !== "dismissed").length,
   };
 
+  const toggleTour = (id: string) => setTourIds((ids) => (ids?.includes(id) ? ids.filter((x) => x !== id) : [...(ids ?? []), id]));
+  const tourHomes = (tourIds ?? []).flatMap((id) => matches.find((m) => m.id === id && m.status !== "dismissed") ?? []);
+
   const card = (m: Match) => (
-    <MatchCard key={m.id} match={m} rejectedFor={rejectReasons.get(m.id)} clientReaction={clientReactions.get(m.id)} onRescored={applyRescored} onUpdate={applyUpdate} />
+    <MatchCard
+      key={m.id}
+      match={m}
+      rejectedFor={rejectReasons.get(m.id)}
+      clientReaction={clientReactions.get(m.id)}
+      tourPick={tourIds ? { picked: tourIds.includes(m.id), full: tourHomes.length >= TOUR_MAX_STOPS, onToggle: () => toggleTour(m.id) } : undefined}
+      onRescored={applyRescored}
+      onUpdate={applyUpdate}
+    />
   );
 
   return (
@@ -150,15 +165,24 @@ export function MatchesPanel({ buyer, initial, feedback }: Props) {
             </button>
           ))}
         </div>
-        <div className="flex gap-1 rounded-lg border border-line bg-card p-0.5">
-          <button onClick={() => setView("list")} className={tab(view === "list")} aria-pressed={view === "list"}>
-            <List size={14} className="mr-1 inline" /> List
-          </button>
-          <button onClick={() => setView("map")} className={tab(view === "map")} aria-pressed={view === "map"}>
-            <MapIcon size={14} className="mr-1 inline" /> Map
-          </button>
+        <div className="flex items-center gap-2">
+          {!tourIds && (
+            <button onClick={() => setTourIds([])} className="btn-ghost !px-3 !py-1.5">
+              <Route size={14} /> Plan a tour
+            </button>
+          )}
+          <div className="flex gap-1 rounded-lg border border-line bg-card p-0.5">
+            <button onClick={() => setView("list")} className={tab(view === "list")} aria-pressed={view === "list"}>
+              <List size={14} className="mr-1 inline" /> List
+            </button>
+            <button onClick={() => setView("map")} className={tab(view === "map")} aria-pressed={view === "map"}>
+              <MapIcon size={14} className="mr-1 inline" /> Map
+            </button>
+          </div>
         </div>
       </div>
+
+      {tourIds && <TourPlanner buyer={buyer} homes={tourHomes} onRemove={toggleTour} onClose={() => setTourIds(null)} />}
 
       {anchors.length > 0 && <CommuteControls anchors={anchors} value={commute} onChange={setCommute} />}
       {commute.maxMinutes != null && overLimit.size > 0 && (

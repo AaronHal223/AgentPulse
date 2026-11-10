@@ -21,13 +21,15 @@ type Props = {
   clientReaction?: { verdict: string; note: string | null };
   /** Feedback on one home can move other homes' scores; the list updates them here. */
   onRescored?: (rescored: Rescored[]) => void;
+  /** Shown while the agent is picking homes for a showing tour. */
+  tourPick?: { picked: boolean; full: boolean; onToggle: () => void };
   /** Tells the list what changed on this home (saved, rejected, sent) so its own copy stays current. */
   onUpdate?: (id: string, change: Partial<Match>) => void;
 };
 
 const message = (err: unknown) => (err instanceof Error ? err.message : "That didn't go through. Please try again.");
 
-export function MatchCard({ match, buyerName, rejectedFor = [], clientReaction, onRescored, onUpdate }: Props) {
+export function MatchCard({ match, buyerName, rejectedFor = [], clientReaction, tourPick, onRescored, onUpdate }: Props) {
   const router = useRouter();
   const [status, setLocalStatus] = useState(match.status);
   const [sent, setSent] = useState(Boolean(match.sentAt));
@@ -113,6 +115,12 @@ export function MatchCard({ match, buyerName, rejectedFor = [], clientReaction, 
 
   return (
     <article className="card overflow-hidden">
+      {tourPick && (
+        <label className={`flex min-h-10 cursor-pointer items-center gap-2 border-b border-line px-4 py-2 text-sm font-medium ${tourPick.picked ? "bg-brand-soft text-brand" : "bg-paper/60 text-ink-soft"}`}>
+          <input type="checkbox" checked={tourPick.picked} disabled={tourPick.full && !tourPick.picked} onChange={tourPick.onToggle} className="h-4 w-4 accent-[#0f7a55]" />
+          {tourPick.picked ? "On the tour" : tourPick.full ? "The tour is full" : "Add to tour"}
+        </label>
+      )}
       <div className="flex gap-3 p-4 sm:gap-4 sm:p-5">
         <ScoreBadge score={match.score} />
         <div className="min-w-0 flex-1">

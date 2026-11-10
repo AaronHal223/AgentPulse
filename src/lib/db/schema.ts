@@ -23,6 +23,8 @@ export const agents = pgTable("agents", {
   name: text("name").notNull(),
   brokerage: text("brokerage"),
   marketArea: text("market_area"),
+  // How the agent writes to clients, in their own words. Used for follow-up drafts.
+  tone: text("tone"),
   briefEmail: text("brief_email"),
   briefEnabled: boolean("brief_enabled").notNull().default(true),
   lastBriefAt: timestamp("last_brief_at", { withTimezone: true }),
