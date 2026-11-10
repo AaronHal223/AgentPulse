@@ -45,6 +45,7 @@ async function main() {
       name: "Dana Rivera",
       brokerage: "Demo Realty",
       marketArea: "South Jersey",
+      tone: "Friendly and brief. First names, no exclamation marks. I sign off with just Dana.",
       passwordHash: await bcrypt.hash("demo1234", 10),
       briefEmail: email,
     })
@@ -56,6 +57,7 @@ async function main() {
       agentId: agent.id,
       name: "Raj & Meera Patel",
       email: "patels@example.com",
+      phone: "856-555-0142",
       intent: "buy",
       budgetMin: 500000,
       budgetMax: 600000,

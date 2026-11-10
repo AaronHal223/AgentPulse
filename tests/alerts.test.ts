@@ -5,6 +5,7 @@ import { schema, type DB } from "../src/lib/db";
 import type { Match } from "../src/lib/db/schema";
 import { alertNewMatches, alertsForBrief, listAlerts, markAlertsRead, raiseAlerts, unreadAlertCount } from "../src/lib/alerts";
 import { recheckSavedHomes } from "../src/lib/ai/recheck";
+import { dueForRecheck, recheckStep } from "../src/lib/daily";
 import { renderBriefEmail } from "../src/lib/brief";
 import { checkedValues, detectChanges, newMatchAlert } from "../src/lib/listing-changes";
 import { isPushEndpoint, pushToAgent, saveSubscription } from "../src/lib/push";
@@ -155,4 +156,29 @@ test("the brief email leads with changes on saved homes, safely escaped", async 
   assert.match(email.html, /Changes on saved homes/);
   assert.match(email.html, /&lt;b&gt;12 Oak St&lt;\/b&gt;/);
   assert.match(email.text, /Changes on saved homes/);
+});
+
+test("the morning run queues clients with stale saved homes, and a failed re-check doesn't block it", async () => {
+  const { agent, buyer } = await agentWithHome({ status: "saved", url: "https://example.com/queue-1" });
+  const fresh = await agentWithHome({ status: "saved", lastCheckedAt: new Date() });
+  const sold = await agentWithHome({ status: "saved", listingStatus: "sold" });
+  const paused = await makeBuyer(db, agent.id, { active: false });
+  await makeMatch(db, paused.id, { status: "saved" });
+
+  const due = (await dueForRecheck()).map((d) => d.buyer.id);
+  assert.ok(due.includes(buyer.id));
+  for (const skipped of [fresh.buyer.id, sold.buyer.id, paused.id]) assert.ok(!due.includes(skipped));
+
+  // The AI is down: the step reports the failure and the client leaves today's queue.
+  const realUrl = process.env.GEMINI_BASE_URL;
+  process.env.AI_PROVIDER = "claude";
+  delete process.env.ANTHROPIC_API_KEY;
+  try {
+    const result = await recheckStep({ agent, buyer });
+    assert.match(result.error ?? "", /ANTHROPIC_API_KEY is not set/);
+  } finally {
+    process.env.AI_PROVIDER = "gemini";
+    process.env.GEMINI_BASE_URL = realUrl;
+  }
+  assert.ok(!(await dueForRecheck()).some((d) => d.buyer.id === buyer.id));
 });

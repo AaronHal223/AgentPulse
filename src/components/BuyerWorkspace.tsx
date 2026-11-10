@@ -5,6 +5,7 @@ import { ProfilePanel } from "./ProfilePanel";
 import { ChatPanel } from "./ChatPanel";
 import { MatchesPanel } from "./MatchesPanel";
 import { ShareLinkPanel } from "./ShareLinkPanel";
+import { FollowUpDraft } from "./FollowUpDraft";
 import { VoiceNote } from "./VoiceNote";
 
 type Props = {
@@ -51,6 +52,7 @@ export function BuyerWorkspace({ buyer: initialBuyer, messages, matches, feedbac
             <ProfilePanel buyer={buyer} onChange={setBuyer} />
           </section>
           <ShareLinkPanel buyer={buyer} />
+          <FollowUpDraft buyer={buyer} />
           <section id="voice-note" className={ANCHOR}>
             <VoiceNote buyer={buyer} canTranscribeAudio={canTranscribeAudio} onSaved={onVoiceNoteSaved} />
           </section>

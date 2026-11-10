@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { api } from "./fetcher";
 
 type Props = {
-  agent: { name: string; email: string; brokerage: string; marketArea: string; briefEmail: string; briefEnabled: boolean };
+  agent: { name: string; email: string; brokerage: string; marketArea: string; tone: string; briefEmail: string; briefEnabled: boolean };
 };
 
 export function SettingsForm({ agent }: Props) {
@@ -24,6 +24,7 @@ export function SettingsForm({ agent }: Props) {
           name: String(f.get("name")),
           brokerage: String(f.get("brokerage")),
           marketArea: String(f.get("marketArea")),
+          tone: String(f.get("tone")),
           briefEmail: String(f.get("briefEmail")),
           briefEnabled: f.get("briefEnabled") === "on",
         },
@@ -50,6 +51,18 @@ export function SettingsForm({ agent }: Props) {
         <div>
           <label className="label">Your market</label>
           <input name="marketArea" defaultValue={agent.marketArea} className="input" placeholder="South Jersey" />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="label">How you write to clients</label>
+          <textarea
+            name="tone"
+            defaultValue={agent.tone}
+            rows={3}
+            maxLength={600}
+            className="input"
+            placeholder="e.g. Friendly and brief, first names, no exclamation marks. I sign off “— Dana”."
+          />
+          <p className="mt-1 text-xs text-muted">Follow-up drafts are written in this voice. Paste a message you&apos;ve sent if that&apos;s easier.</p>
         </div>
       </div>
       <div className="border-t border-line pt-5">

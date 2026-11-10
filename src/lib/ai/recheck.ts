@@ -66,6 +66,15 @@ async function savedHomesDue(buyerId: string): Promise<Match[]> {
     .limit(HOMES_PER_RUN);
 }
 
+/** Counts a client's saved homes as looked at today without checking them, after a failed re-check. */
+export async function skipRecheck(buyerId: string) {
+  const db = await getDb();
+  await db
+    .update(schema.matches)
+    .set({ lastCheckedAt: new Date() })
+    .where(and(eq(schema.matches.buyerId, buyerId), eq(schema.matches.status, "saved")));
+}
+
 function parseChecks(raw: unknown): Map<string, ListingCheck> {
   const checks = new Map<string, ListingCheck>();
   for (const item of Array.isArray(raw) ? raw : []) {
