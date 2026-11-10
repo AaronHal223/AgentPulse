@@ -2,7 +2,8 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Link2, Search } from "lucide-react";
-import type { Buyer, Match } from "@/lib/db/schema";
+import type { Buyer, Match, MatchFeedback } from "@/lib/db/schema";
+import type { Rescored } from "@/lib/scoring";
 import { timeAgo } from "@/lib/format";
 import { MatchCard } from "./MatchCard";
 import { api } from "./fetcher";
@@ -17,7 +18,9 @@ const SEARCH_STEPS = [
   "Working out drive times…",
 ];
 
-export function MatchesPanel({ buyer, initial }: { buyer: Buyer; initial: Match[] }) {
+type Props = { buyer: Buyer; initial: Match[]; feedback: MatchFeedback[] };
+
+export function MatchesPanel({ buyer, initial, feedback }: Props) {
   const router = useRouter();
   const [matches, setMatches] = useState(initial);
   const [filter, setFilter] = useState<Filter>("all");
@@ -67,6 +70,19 @@ export function MatchesPanel({ buyer, initial }: { buyer: Buyer; initial: Match[
     }
     setAnalyzing(false);
   }
+
+  function applyRescored(rescored: Rescored[]) {
+    const scores = new Map(rescored.map((r) => [r.id, r.score]));
+    setMatches((prev) => prev.map((m) => (scores.has(m.id) ? { ...m, score: scores.get(m.id)! } : m)));
+  }
+
+  const applyStatus = (id: string, status: string) =>
+    setMatches((prev) => prev.map((m) => (m.id === id ? { ...m, status } : m)));
+
+  const rejectReasons = useMemo(
+    () => new Map(feedback.filter((f) => f.source === "agent" && f.verdict === "rejected").map((f) => [f.matchId, f.reasons])),
+    [feedback],
+  );
 
   const visible = useMemo(() => {
     const list = matches.filter((m) =>
@@ -152,7 +168,7 @@ export function MatchesPanel({ buyer, initial }: { buyer: Buyer; initial: Match[
       ) : (
         <div className="space-y-3">
           {visible.map((m) => (
-            <MatchCard key={m.id} match={m} />
+            <MatchCard key={m.id} match={m} rejectedFor={rejectReasons.get(m.id)} onRescored={applyRescored} onStatus={applyStatus} />
           ))}
         </div>
       )}

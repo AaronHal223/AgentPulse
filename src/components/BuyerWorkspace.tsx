@@ -1,11 +1,13 @@
 "use client";
 import { useState } from "react";
-import type { Buyer, Match, Message } from "@/lib/db/schema";
+import type { Buyer, Match, MatchFeedback, Message } from "@/lib/db/schema";
 import { ProfilePanel } from "./ProfilePanel";
 import { ChatPanel } from "./ChatPanel";
 import { MatchesPanel } from "./MatchesPanel";
 
-export function BuyerWorkspace({ buyer: initialBuyer, messages, matches }: { buyer: Buyer; messages: Message[]; matches: Match[] }) {
+type Props = { buyer: Buyer; messages: Message[]; matches: Match[]; feedback: MatchFeedback[] };
+
+export function BuyerWorkspace({ buyer: initialBuyer, messages, matches, feedback }: Props) {
   const [buyer, setBuyer] = useState(initialBuyer);
   return (
     <div className="space-y-6">
@@ -15,7 +17,7 @@ export function BuyerWorkspace({ buyer: initialBuyer, messages, matches }: { buy
           <ProfilePanel buyer={buyer} onChange={setBuyer} />
           <ChatPanel buyer={buyer} initial={messages} onBuyer={setBuyer} />
         </div>
-        <MatchesPanel buyer={buyer} initial={matches} />
+        <MatchesPanel buyer={buyer} initial={matches} feedback={feedback} />
       </div>
     </div>
   );

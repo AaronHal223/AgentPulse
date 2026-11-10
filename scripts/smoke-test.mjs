@@ -67,6 +67,10 @@ async function main() {
   } else {
     await req(`/api/buyers/${id}`, { method: "PATCH", body: { mustHaves: ["Yard"], budgetMin: null } });
     for (const p of ["/dashboard", "/buyers", "/buyers/new", `/buyers/${id}`, "/settings"]) await req(p);
+    // Home feedback routes only answer for homes the agent owns.
+    await req("/api/matches/not-a-real-home", { method: "PATCH", body: { status: "saved" }, expect: 404 });
+    await req("/api/matches/not-a-real-home/why", { expect: 404 });
+    await req("/api/matches/not-a-real-home/send", { method: "POST", expect: 404 });
     await req(`/api/buyers/${id}`, { method: "DELETE" });
   }
   await req("/api/settings", { method: "PATCH", body: { briefEnabled: false } });
@@ -98,6 +102,11 @@ async function main() {
   const victim = `guess-${Date.now()}@example.com`;
   for (let i = 0; i < 10; i++) await req("/api/auth/login", { method: "POST", body: { email: victim, password: `wrong-${i}` }, expect: 401 });
   await req("/api/auth/login", { method: "POST", body: { email: victim, password: "wrong-again" }, expect: 429 });
+
+  // Logged out, the feedback routes refuse everyone.
+  cookie = "";
+  await req("/api/matches/anything", { method: "PATCH", body: { status: "saved" }, expect: 401 });
+  await req("/api/matches/anything/why", { expect: 401 });
 
   // Cron endpoints refuse requests without the secret.
   await req("/api/cron/send-briefs", { expect: [401, 503] });

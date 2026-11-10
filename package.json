@@ -8,6 +8,7 @@
     "build": "npm run db:migrate && next build",
     "start": "NODE_OPTIONS=\"${NODE_OPTIONS:---max-old-space-size=400}\" next start",
     "lint": "tsc --noEmit",
+    "test": "tsx --conditions=react-server --test tests/*.test.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
     "build:app": "next build",
