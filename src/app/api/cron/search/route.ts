@@ -3,12 +3,13 @@ import { and, asc, eq, isNull, lt, or } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { handler } from "@/lib/api";
 import { assertCron } from "@/lib/cron";
-import { searchHomesForBuyer } from "@/lib/ai/search";
+import { dailyRunForBuyer } from "@/lib/daily";
 
 export const maxDuration = 300;
 
 /**
- * Searches for every active buyer that hasn't been searched in ~20 hours.
+ * Searches for every active buyer that hasn't been searched in ~20 hours, and re-checks their
+ * saved homes for price drops and status changes.
  * Stops starting new searches when the time budget runs low and reports how many remain,
  * so the scheduler can call it again until `remaining` is 0.
  */
@@ -36,7 +37,7 @@ export const GET = handler(async (req: Request) => {
   for (const { buyer, agent } of due) {
     if (Date.now() - started > budgetMs) break;
     try {
-      await searchHomesForBuyer(agent, buyer);
+      await dailyRunForBuyer(agent, buyer);
     } catch (err) {
       errors.push(`${buyer.id}: ${err instanceof Error ? err.message : String(err)}`);
       // Mark as searched so one broken profile can't block the queue.

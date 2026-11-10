@@ -10,7 +10,7 @@ export function EmailBriefButton() {
     setBusy(true);
     try {
       const r = await api<{ sent: number; to: string }>("/api/brief/send", { method: "POST" });
-      setMsg(r.sent ? `Sent ${r.sent} home${r.sent === 1 ? "" : "s"} to ${r.to}` : "Nothing new to send — every good match has already been emailed.");
+      setMsg(r.sent ? `Sent your brief (${r.sent} item${r.sent === 1 ? "" : "s"}) to ${r.to}` : "Nothing new to send — every good match and alert has already been emailed.");
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Couldn't send");
     }

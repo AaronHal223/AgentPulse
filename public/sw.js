@@ -1,5 +1,6 @@
-// AgentPulse service worker: makes the app installable, loads fast, and shows a friendly page offline.
-const VERSION = "agentpulse-v1";
+// AgentPulse service worker: makes the app installable, loads fast, shows a friendly page
+// offline, and displays notifications (price drops, status changes, strong new matches).
+const VERSION = "agentpulse-v2";
 const STATIC = `${VERSION}-static`;
 const OFFLINE_URL = "/offline.html";
 
@@ -50,4 +51,37 @@ self.addEventListener("fetch", (event) => {
   if (req.mode === "navigate") {
     event.respondWith(fetch(req).catch(() => caches.match(OFFLINE_URL)));
   }
+});
+
+self.addEventListener("push", (event) => {
+  let note = {};
+  try {
+    note = event.data ? event.data.json() : {};
+  } catch {
+    note = { body: event.data ? event.data.text() : "" };
+  }
+  event.waitUntil(
+    self.registration.showNotification(note.title || "AgentPulse", {
+      body: note.body || "",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      tag: note.tag,
+      data: { url: note.url || "/alerts" },
+    }),
+  );
+});
+
+// Tapping a notification opens the app on the page it's about (always a page of this site).
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  let target = new URL((event.notification.data && event.notification.data.url) || "/alerts", self.location.origin);
+  if (target.origin !== self.location.origin) target = new URL("/alerts", self.location.origin);
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (windows) => {
+      const open = windows.find((w) => new URL(w.url).origin === self.location.origin);
+      if (!open) return self.clients.openWindow(target.href);
+      const moved = await open.navigate(target.href).catch(() => null);
+      return moved ? moved.focus() : self.clients.openWindow(target.href);
+    }),
+  );
 });

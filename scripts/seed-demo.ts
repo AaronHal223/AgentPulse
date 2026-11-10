@@ -145,6 +145,24 @@ async function main() {
     },
   ]);
 
+  const homes = await db.select().from(schema.matches).where(eq(schema.matches.buyerId, patels.id));
+  const maple = homes.find((h) => h.address === "412 Maple Ave")!;
+  const lees = homes.find((h) => h.address === "27 Lees Ave")!;
+  await db.update(schema.matches).set({ status: "saved" }).where(eq(schema.matches.id, lees.id));
+  await db.insert(schema.matchFeedback).values({ matchId: lees.id, buyerId: patels.id, source: "agent", verdict: "saved" });
+  await db.insert(schema.alerts).values([
+    {
+      agentId: agent.id, buyerId: patels.id, matchId: lees.id, kind: "price_drop",
+      title: "Price drop: 27 Lees Ave, Collingswood", body: "$565,000 → $549,000 (down 2.8%).",
+      data: { oldPrice: 565000, newPrice: 549000 }, createdAt: new Date(now - 90 * 60 * 1000),
+    },
+    {
+      agentId: agent.id, buyerId: patels.id, matchId: maple.id, kind: "new_match",
+      title: "9/10 match for Raj & Meera Patel", body: "412 Maple Ave, Haddonfield · $589,000",
+      data: { score: 9 }, createdAt: new Date(now - 2 * 3600 * 1000),
+    },
+  ]);
+
   await close();
   console.log("✓ Demo data ready. Log in as demo@agentpulse.dev / demo1234");
 }

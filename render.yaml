@@ -36,6 +36,12 @@ services:
         sync: false
       - key: APP_URL
         sync: false # e.g. https://agentpulse-skse.onrender.com
+      - key: VAPID_PUBLIC_KEY
+        sync: false # phone notifications: npx web-push generate-vapid-keys
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        sync: false # mailto:you@example.com (optional when APP_URL is an https address)
       - key: APP_TIMEZONE
         value: America/New_York
       - key: NODE_OPTIONS

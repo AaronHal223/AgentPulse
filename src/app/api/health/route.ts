@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { authSecretOk } from "@/lib/session";
 import { aiConfigured, aiProvider } from "@/lib/ai/provider";
+import { pushConfigured } from "@/lib/push";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,7 @@ export async function GET() {
     ai: aiConfigured(),
     driveTimes: Boolean(process.env.ORS_API_KEY),
     email: Boolean(process.env.RESEND_API_KEY),
+    notifications: pushConfigured(),
     authSecret: authSecretOk(),
     inviteOnly: Boolean(process.env.SIGNUP_CODE),
   };

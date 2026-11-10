@@ -5,6 +5,7 @@ import { Car, Check, Copy, MapPinOff, ThumbsDown, ThumbsUp } from "lucide-react"
 import type { Match } from "@/lib/db/schema";
 import type { RejectReason, Rescored } from "@/lib/scoring";
 import { distanceText, factsLine, formatPrice } from "@/lib/format";
+import { statusLabel } from "@/lib/listing-changes";
 import { ScoreBadge } from "./ScoreBadge";
 import { MatchActions } from "./MatchActions";
 import { WhyScore } from "./WhyScore";
@@ -127,6 +128,9 @@ export function MatchCard({ match, buyerName, rejectedFor = [], clientReaction, 
               {match.source ? ` · ${match.source}` : ""}
               {buyerName ? ` · for ${buyerName}` : ""}
             </span>
+            {match.listingStatus !== "active" && (
+              <span className="rounded-full bg-amber-soft px-2 py-0.5 text-xs font-semibold text-amber">{statusLabel(match.listingStatus)}</span>
+            )}
           </div>
 
           {(distances.length > 0 || !match.inArea) && (

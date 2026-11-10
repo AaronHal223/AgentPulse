@@ -61,6 +61,19 @@ async function shareLinkChecks(buyerId) {
   cookie = agentCookie;
 }
 
+/** Alerts and notification settings answer for the logged-in agent and reject bad input. */
+async function alertChecks() {
+  const inbox = await (await req("/api/alerts")).json();
+  if (!Array.isArray(inbox.alerts) || inbox.unread !== 0) {
+    failures++;
+    console.log("✗ a new agent should have an empty alerts list");
+  }
+  await req("/api/alerts", { method: "PATCH", body: {} });
+  await req("/api/push");
+  // A notification address that isn't a real push service is never accepted (503 when push isn't set up).
+  await req("/api/push", { method: "POST", body: { endpoint: "https://example.com/hook", keys: { p256dh: "a", auth: "b" } }, expect: [400, 503] });
+}
+
 async function main() {
   // Public pages and app-install files
   await req("/");
@@ -101,7 +114,8 @@ async function main() {
     console.log("✗ client was not created");
   } else {
     await req(`/api/buyers/${id}`, { method: "PATCH", body: { mustHaves: ["Yard"], budgetMin: null } });
-    for (const p of ["/dashboard", "/buyers", "/buyers/new", `/buyers/${id}`, "/settings"]) await req(p);
+    for (const p of ["/dashboard", "/buyers", "/buyers/new", `/buyers/${id}`, "/alerts", "/settings"]) await req(p);
+    await alertChecks();
     // Home feedback routes only answer for homes the agent owns.
     await req("/api/matches/not-a-real-home", { method: "PATCH", body: { status: "saved" }, expect: 404 });
     await req("/api/matches/not-a-real-home/why", { expect: 404 });
@@ -143,6 +157,9 @@ async function main() {
   cookie = "";
   await req("/api/matches/anything", { method: "PATCH", body: { status: "saved" }, expect: 401 });
   await req("/api/matches/anything/why", { expect: 401 });
+  await req("/api/alerts", { expect: 401 });
+  await req("/api/push", { method: "POST", body: {}, expect: 401 });
+  await req("/api/buyers/anything/recheck", { method: "POST", expect: 401 });
 
   // Cron endpoints refuse requests without the secret.
   await req("/api/cron/send-briefs", { expect: [401, 503] });

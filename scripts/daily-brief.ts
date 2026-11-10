@@ -1,5 +1,6 @@
 /**
- * Daily brief job: searches for every active client that's due, then emails each agent.
+ * Daily brief job: searches for every active client that's due, re-checks their saved homes,
+ * then emails each agent.
  * Runs as a scheduled job on the host (Render Cron Job) with the same env vars as the app:
  *   npm run brief
  * Unlike the HTTP cron endpoints, it has no time limit, so it finishes every client in one run.
@@ -7,7 +8,7 @@
 import "./load-env";
 import { and, asc, eq, isNull, lt, or } from "drizzle-orm";
 import { getDb, schema } from "../src/lib/db";
-import { searchHomesForBuyer } from "../src/lib/ai/search";
+import { dailyRunForBuyer } from "../src/lib/daily";
 import { sendBriefForAgent } from "../src/lib/brief";
 
 async function main() {
@@ -24,8 +25,8 @@ async function main() {
   for (const { buyer, agent } of due) {
     const started = Date.now();
     try {
-      const { matches } = await searchHomesForBuyer(agent, buyer);
-      console.log(`  ✓ ${buyer.name}: ${matches.length} new home(s) in ${Math.round((Date.now() - started) / 1000)}s`);
+      const run = await dailyRunForBuyer(agent, buyer);
+      console.log(`  ✓ ${buyer.name}: ${run.found} new home(s), ${run.checked} re-checked, ${run.alerts} alert(s) in ${Math.round((Date.now() - started) / 1000)}s`);
     } catch (err) {
       console.error(`  ✗ ${buyer.name}:`, err instanceof Error ? err.message : err);
       await db.update(schema.buyers).set({ lastSearchedAt: new Date() }).where(eq(schema.buyers.id, buyer.id));
