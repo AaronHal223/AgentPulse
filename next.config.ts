@@ -19,6 +19,15 @@ const nextConfig: NextConfig = {
       { source: "/:path*", headers: securityHeaders },
       // Client data must never be stored by browsers or in-between caches.
       { source: "/api/:path*", headers: [{ key: "Cache-Control", value: "no-store" }] },
+      // Client share pages: keep them out of search engines, caches, and other sites' referrer logs.
+      {
+        source: "/s/:path*",
+        headers: [
+          { key: "Cache-Control", value: "no-store" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+        ],
+      },
     ];
   },
 };

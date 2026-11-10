@@ -82,13 +82,27 @@ function sizeAdjustment(home: HomeFacts, entries: FeedbackEntry[]): Adjustment {
   return { delta: -1, notes: [`About the size of homes they found too ${tooBig ? "big" : "small"}`] };
 }
 
+/** The client's own reaction to this exact home, from their private page. */
+function clientAdjustment(home: HomeFacts, entries: FeedbackEntry[]): Adjustment {
+  const own = entries.find((e) => e.source === "client" && e.home.id === home.id);
+  if (own?.verdict === "liked") return { delta: 1, notes: ["Your client liked this home"] };
+  if (own?.verdict === "disliked") return { delta: -2, notes: ["Your client passed on this home"] };
+  return { delta: 0, notes: [] };
+}
+
 /**
- * Points to add to (or take off) a home's score because of what the agent and client said
- * about other homes. A home's own feedback is left out so it can't vote for itself.
+ * Points to add to (or take off) a home's score because of feedback. Patterns are learned
+ * from other homes only, so the agent saving a home can't make it vote for itself; the
+ * client's reaction to this very home counts directly.
  */
 export function feedbackAdjustment(home: HomeFacts, allEntries: FeedbackEntry[]): Adjustment {
   const entries = allEntries.filter((e) => e.home.id !== home.id);
-  const parts = [priceAdjustment(home, entries), locationAdjustment(home, entries), sizeAdjustment(home, entries)];
+  const parts = [
+    priceAdjustment(home, entries),
+    locationAdjustment(home, entries),
+    sizeAdjustment(home, entries),
+    clientAdjustment(home, allEntries),
+  ];
   const total = parts.reduce((n, p) => n + p.delta, 0);
   return {
     delta: Math.max(MAX_PENALTY, Math.min(MAX_BOOST, total)),
@@ -217,18 +231,22 @@ function homeLine(h: HomeFacts) {
   return [[h.address, h.city].filter(Boolean).join(", ") || "A home", facts.join(", ")].filter(Boolean).join(" — ");
 }
 
-/**
- * Feedback as plain text for the search prompt, so the AI looks for more of what they liked
- * and scores look-alikes of rejected homes lower. Notes are quoted as data, never instructions.
- */
-export function feedbackForPrompt(entries: FeedbackEntry[], limit = 12): string {
-  if (!entries.length) return "";
-  const lines = entries.slice(0, limit).map((e) => {
+/** One line per piece of feedback, newest first. Notes are quoted as data, never instructions. */
+export function feedbackLines(entries: FeedbackEntry[], limit = 12): string[] {
+  return entries.slice(0, limit).map((e) => {
     const who = e.source === "client" ? "the client" : "the agent";
     const why = e.reasons.length ? ` because of ${e.reasons.join(", ")}` : "";
     const note = e.note ? ` Their note: "${e.note.replace(/["\n]/g, " ").slice(0, 200)}"` : "";
     const verb = isPositive(e) ? "LIKED" : "REJECTED";
     return `- ${verb} by ${who}${why}: ${homeLine(e.home)}.${note}`;
   });
-  return `\n\nFeedback on homes shown so far. Look for homes like the liked ones, avoid look-alikes of the rejected ones, and let it move your scores:\n${lines.join("\n")}`;
+}
+
+/**
+ * Feedback as plain text for the search prompt, so the AI looks for more of what they liked
+ * and scores look-alikes of rejected homes lower.
+ */
+export function feedbackForPrompt(entries: FeedbackEntry[]): string {
+  if (!entries.length) return "";
+  return `\n\nFeedback on homes shown so far. Look for homes like the liked ones, avoid look-alikes of the rejected ones, and let it move your scores:\n${feedbackLines(entries).join("\n")}`;
 }

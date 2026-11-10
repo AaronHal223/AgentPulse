@@ -26,6 +26,41 @@ async function req(path, { method = "GET", body, expect = 200, redirect = "manua
   return res;
 }
 
+/** A client's private link opens without a login, and stops working once it's switched off. */
+async function shareLinkChecks(buyerId) {
+  const { link } = await (await req(`/api/buyers/${buyerId}/share`, { method: "POST" })).json();
+  const path = link?.url ? new URL(link.url).pathname : "";
+  if (!/^\/s\/[A-Za-z0-9_-]{43}$/.test(path)) {
+    failures++;
+    console.log(`✗ share link should be /s/<long random token>, got ${link?.url}`);
+    return;
+  }
+  const agentCookie = cookie;
+  cookie = ""; // the client has no login
+
+  const page = await req(path);
+  const html = await page.text();
+  if (!html.includes("Test Client") || page.headers.get("x-robots-tag") !== "noindex, nofollow") {
+    failures++;
+    console.log("✗ the client page should show the client's name and be hidden from search engines");
+  }
+  const token = path.split("/")[2];
+  await req(`/api/share/${token}/reactions`, { method: "POST", body: { matchId: "not-on-this-page", reaction: "liked" }, expect: 404 });
+  await req(`/api/share/${"x".repeat(43)}/reactions`, { method: "POST", body: { matchId: "any", reaction: "liked" }, expect: 404 });
+  // Someone who isn't logged in can't make or switch off links.
+  await req(`/api/buyers/${buyerId}/share`, { method: "POST", expect: 401 });
+
+  cookie = agentCookie;
+  await req(`/api/buyers/${buyerId}/share`, { method: "DELETE" });
+  cookie = "";
+  if (!(await (await req(path)).text()).includes("no longer active")) {
+    failures++;
+    console.log("✗ a switched-off link should say it is no longer active");
+  }
+  await req(`/api/share/${token}/reactions`, { method: "POST", body: { matchId: "any", reaction: "liked" }, expect: 404 });
+  cookie = agentCookie;
+}
+
 async function main() {
   // Public pages and app-install files
   await req("/");
@@ -71,6 +106,7 @@ async function main() {
     await req("/api/matches/not-a-real-home", { method: "PATCH", body: { status: "saved" }, expect: 404 });
     await req("/api/matches/not-a-real-home/why", { expect: 404 });
     await req("/api/matches/not-a-real-home/send", { method: "POST", expect: 404 });
+    await shareLinkChecks(id);
     await req(`/api/buyers/${id}`, { method: "DELETE" });
   }
   await req("/api/settings", { method: "PATCH", body: { briefEnabled: false } });
