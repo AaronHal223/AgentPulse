@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Link2, Search } from "lucide-react";
+import { Link2, RefreshCw, Search } from "lucide-react";
 import type { Buyer, Match, MatchFeedback } from "@/lib/db/schema";
 import type { Rescored } from "@/lib/scoring";
 import { timeAgo } from "@/lib/format";
@@ -31,6 +31,7 @@ export function MatchesPanel({ buyer, initial, feedback }: Props) {
   const [link, setLink] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [lastSearched, setLastSearched] = useState(buyer.lastSearchedAt);
+  const [rechecking, setRechecking] = useState(false);
 
   async function findHomes() {
     setSearching(true);
@@ -69,6 +70,25 @@ export function MatchesPanel({ buyer, initial, feedback }: Props) {
       setError(err instanceof Error ? err.message : "Couldn't analyze that link");
     }
     setAnalyzing(false);
+  }
+
+  async function recheckSaved() {
+    setRechecking(true);
+    setError("");
+    setNote("");
+    try {
+      const res = await api<{ homes: Match[]; alerts: unknown[] }>(`/api/buyers/${buyer.id}/recheck`, { method: "POST" });
+      const fresh = new Map(res.homes.map((h) => [h.id, h]));
+      setMatches((prev) => prev.map((m) => fresh.get(m.id) ?? m));
+      const changes = res.alerts.length;
+      setNote(
+        `Checked ${res.homes.length} saved home${res.homes.length === 1 ? "" : "s"}. ${changes ? `${changes} change${changes === 1 ? "" : "s"} found — see Alerts.` : "Nothing has changed."}`,
+      );
+      if (changes) router.refresh(); // updates the unread count in the navigation
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't re-check the saved homes");
+    }
+    setRechecking(false);
   }
 
   function applyRescored(rescored: Rescored[]) {
@@ -159,6 +179,15 @@ export function MatchesPanel({ buyer, initial, feedback }: Props) {
           </button>
         ))}
       </div>
+
+      {filter === "saved" && counts.saved > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-card px-4 py-3">
+          <p className="text-sm text-ink-soft">Saved homes are re-checked every morning for price drops and status changes.</p>
+          <button onClick={recheckSaved} disabled={rechecking} className="btn-ghost !px-3 !py-1.5">
+            <RefreshCw size={14} className={rechecking ? "animate-spin" : ""} /> {rechecking ? "Checking…" : "Check now"}
+          </button>
+        </div>
+      )}
 
       {!visible.length ? (
         <div className="card px-6 py-12 text-center text-sm text-ink-soft">

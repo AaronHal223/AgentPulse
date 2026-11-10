@@ -49,6 +49,9 @@ test("new migrations run on a database that already has clients and homes, witho
   const scores = await client.query<{ id: string; score: number }>("select id, score from matches order by id");
   assert.deepEqual(scores.rows.map((r) => r.score), [9, 3, 6]);
 
+  const statuses = await client.query<{ listing_status: string }>("select distinct listing_status from matches");
+  assert.deepEqual(statuses.rows, [{ listing_status: "active" }], "homes found before alerts existed start out active");
+
   const feedback = await client.query<{ match_id: string; verdict: string }>("select match_id, verdict from match_feedback order by match_id");
   assert.deepEqual(feedback.rows, [
     { match_id: "m1", verdict: "saved" },

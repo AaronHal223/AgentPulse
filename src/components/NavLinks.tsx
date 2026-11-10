@@ -1,11 +1,12 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Settings, Sunrise, Users } from "lucide-react";
+import { Bell, Settings, Sunrise, Users } from "lucide-react";
 
 const links = [
   { href: "/dashboard", label: "Brief", icon: Sunrise },
   { href: "/buyers", label: "Clients", icon: Users },
+  { href: "/alerts", label: "Alerts", icon: Bell },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -14,8 +15,12 @@ function useActive() {
   return (href: string) => path === href || path.startsWith(href + "/");
 }
 
+type Props = { unreadAlerts?: number };
+
+const badgeFor = (href: string, unread: number) => (href === "/alerts" && unread > 0 ? (unread > 9 ? "9+" : String(unread)) : null);
+
 /** Top navigation on tablets and desktops. */
-export function NavLinks() {
+export function NavLinks({ unreadAlerts = 0 }: Props) {
   const isActive = useActive();
   return (
     <nav className="hidden gap-1 sm:flex">
@@ -26,6 +31,9 @@ export function NavLinks() {
           className={`rounded-md px-3 py-1.5 text-sm font-medium ${isActive(l.href) ? "bg-ink text-white" : "text-ink-soft hover:bg-line/60"}`}
         >
           {l.label}
+          {badgeFor(l.href, unreadAlerts) && (
+            <span className="ml-1.5 rounded-full bg-brand px-1.5 py-0.5 text-[11px] font-bold text-white">{badgeFor(l.href, unreadAlerts)}</span>
+          )}
         </Link>
       ))}
     </nav>
@@ -33,16 +41,21 @@ export function NavLinks() {
 }
 
 /** Bottom tab bar on phones, like a native app. */
-export function TabBar() {
+export function TabBar({ unreadAlerts = 0 }: Props) {
   const isActive = useActive();
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden">
-      <div className="grid grid-cols-3">
+      <div className="grid grid-cols-4">
         {links.map((l) => {
           const active = isActive(l.href);
           return (
             <Link key={l.href} href={l.href} className={`flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold ${active ? "text-ink" : "text-muted"}`}>
-              <l.icon size={21} strokeWidth={active ? 2.4 : 1.8} />
+              <span className="relative">
+                <l.icon size={21} strokeWidth={active ? 2.4 : 1.8} />
+                {badgeFor(l.href, unreadAlerts) && (
+                  <span className="absolute -top-1.5 -right-2.5 rounded-full bg-brand px-1 text-[10px] font-bold leading-4 text-white">{badgeFor(l.href, unreadAlerts)}</span>
+                )}
+              </span>
               {l.label}
             </Link>
           );

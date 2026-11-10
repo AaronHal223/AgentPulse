@@ -5,11 +5,13 @@ import { requireAgent } from "@/lib/auth";
 import { getDb, schema } from "@/lib/db";
 import { getBriefGroups } from "@/lib/brief";
 import { recentClientReactions } from "@/lib/feedback";
+import { listAlerts } from "@/lib/alerts";
 import { budgetLabel } from "@/lib/profile";
 import { MatchCard } from "@/components/MatchCard";
 import { RunSearchesButton } from "@/components/RunSearchesButton";
 import { EmailBriefButton } from "@/components/EmailBriefButton";
 import { ClientReactions } from "@/components/ClientReactions";
+import { AlertsInbox } from "@/components/AlertsInbox";
 
 function greeting() {
   const h = Number(new Date().toLocaleString("en-US", { hour: "numeric", hour12: false, timeZone: process.env.APP_TIMEZONE || "America/New_York" }));
@@ -19,7 +21,7 @@ function greeting() {
 export default async function Dashboard() {
   const agent = await requireAgent();
   const db = await getDb();
-  const [buyers, groups, [{ total }], reactions] = await Promise.all([
+  const [buyers, groups, [{ total }], reactions, alerts] = await Promise.all([
     db.select().from(schema.buyers).where(and(eq(schema.buyers.agentId, agent.id), eq(schema.buyers.active, true))),
     getBriefGroups(agent.id, 24),
     db
@@ -28,6 +30,7 @@ export default async function Dashboard() {
       .innerJoin(schema.buyers, eq(schema.matches.buyerId, schema.buyers.id))
       .where(and(eq(schema.buyers.agentId, agent.id), eq(schema.matches.status, "saved"))),
     recentClientReactions(agent.id),
+    listAlerts(agent.id, { unreadOnly: true, limit: 5 }),
   ]);
 
   const newCount = groups.reduce((n, g) => n + g.matches.length, 0);
@@ -71,6 +74,8 @@ export default async function Dashboard() {
           </div>
         ))}
       </div>
+
+      <AlertsInbox initial={alerts} title="Alerts" moreHref="/alerts" />
 
       <ClientReactions reactions={reactions} />
 

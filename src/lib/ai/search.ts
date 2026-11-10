@@ -2,7 +2,8 @@ import "server-only";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, schema } from "../db";
-import type { Agent, Buyer, Match } from "../db/schema";
+import type { Agent, Alert, Buyer, Match } from "../db/schema";
+import { alertNewMatches } from "../alerts";
 import { stripNulls } from "../buyers";
 import { profileForPrompt } from "../profile";
 import { distancesFrom, geocode, geocodeAnchors } from "../geo";
@@ -252,12 +253,15 @@ function onPagesFound(listings: Listing[], sources?: string[]): Listing[] {
   return listings.filter((l) => sites.has(siteOf(l.url)));
 }
 
-/** Searches the web for homes for one buyer, scores them and saves new matches. */
+/**
+ * Searches the web for homes for one buyer, scores them and saves new matches. Strong new
+ * matches raise an alert; `push` also sends it to the agent's phone (for scheduled runs).
+ */
 export async function searchHomesForBuyer(
   agent: Agent,
   buyer: Buyer,
-  opts: { maxListings?: number } = {},
-): Promise<{ matches: Match[]; notes?: string }> {
+  opts: { maxListings?: number; push?: boolean } = {},
+): Promise<{ matches: Match[]; alerts: Alert[]; notes?: string }> {
   const db = await getDb();
   const known = await db
     .select({ url: schema.matches.url, address: schema.matches.address })
@@ -307,7 +311,8 @@ export async function searchHomesForBuyer(
   }
   const matches = await enrichAndSave(buyer, confirmed, "search", feedback);
   await db.update(schema.buyers).set({ lastSearchedAt: new Date() }).where(eq(schema.buyers.id, buyer.id));
-  return { matches, notes };
+  const alerts = await alertNewMatches(agent.id, buyer, matches, { push: opts.push ?? false });
+  return { matches, alerts, notes };
 }
 
 /** Evaluates one specific listing link (Zillow, Redfin, anything) for a buyer. */

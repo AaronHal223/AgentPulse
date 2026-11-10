@@ -129,6 +129,9 @@ export const matches = pgTable(
     origin: text("origin").notNull().default("search"), // search | link
     briefedAt: timestamp("briefed_at", { withTimezone: true }),
     sentAt: timestamp("sent_at", { withTimezone: true }), // when the agent sent it to the client
+    // What the listing looked like the last time it was re-checked on the web.
+    listingStatus: text("listing_status").notNull().default("active"), // active | pending | sold | off_market
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -185,6 +188,55 @@ export const shareLinks = pgTable(
   (t) => [index("share_links_buyer_idx").on(t.buyerId)],
 );
 
+export type AlertData = {
+  oldPrice?: number;
+  newPrice?: number;
+  oldStatus?: string;
+  newStatus?: string;
+  score?: number;
+};
+
+/** Something the agent should know about: a price drop, a status change, a strong new match. */
+export const alerts = pgTable(
+  "alerts",
+  {
+    id: id(),
+    agentId: text("agent_id")
+      .notNull()
+      .references(() => agents.id, { onDelete: "cascade" }),
+    buyerId: text("buyer_id")
+      .notNull()
+      .references(() => buyers.id, { onDelete: "cascade" }),
+    matchId: text("match_id")
+      .notNull()
+      .references(() => matches.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(), // price_drop | back_on_market | status_change | new_match
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    data: jsonb("data").$type<AlertData>().notNull().default({}),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    briefedAt: timestamp("briefed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("alerts_agent_created_idx").on(t.agentId, t.createdAt)],
+);
+
+/** A phone or browser the agent allowed to receive notifications. */
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: id(),
+    agentId: text("agent_id")
+      .notNull()
+      .references(() => agents.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull().unique(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("push_subscriptions_agent_idx").on(t.agentId)],
+);
+
 export type Agent = typeof agents.$inferSelect;
 export type Buyer = typeof buyers.$inferSelect;
 export type NewBuyer = typeof buyers.$inferInsert;
@@ -192,3 +244,5 @@ export type Match = typeof matches.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type MatchFeedback = typeof matchFeedback.$inferSelect;
 export type ShareLink = typeof shareLinks.$inferSelect;
+export type Alert = typeof alerts.$inferSelect;
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
