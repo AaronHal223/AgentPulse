@@ -8,6 +8,9 @@ export type ToolSpec = {
 
 export type ChatTurn = { role: "user" | "assistant"; content: string };
 
+/** A short recording (base64) for the model to listen to. */
+export type AudioClip = { mimeType: string; base64: string };
+
 export type ClientToolHandler = (
   name: string,
   input: unknown,
@@ -17,6 +20,8 @@ export type AgentRequest = {
   system: string;
   messages: ChatTurn[];
   tools: ToolSpec[];
+  /** A recording that goes with the last message. Only some providers can listen (see aiHearsAudio). */
+  audio?: AudioClip;
   /** Web access for this request. Leave out for none. */
   web?: { searches: number; pageReads: number };
   onClientTool?: ClientToolHandler;

@@ -41,6 +41,9 @@ function toolsFor(req: AgentRequest): Anthropic.Messages.ToolUnion[] {
  * client tools. Handles `pause_turn` (long searches) and client tool round-trips.
  */
 export async function runClaude(req: AgentRequest): Promise<AgentResult> {
+  if (req.audio) {
+    throw new AiServiceError("Claude can't listen to recordings. Type the note (or use your keyboard's microphone) instead.", false);
+  }
   try {
     return await loop(req);
   } catch (err) {

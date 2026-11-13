@@ -13,7 +13,8 @@ export function authSecretOk() {
   return Boolean(s && s.length >= 32) || !isHosted();
 }
 
-function secret() {
+/** The app's signing secret. Also the root of the key that seals share-link tokens. */
+export function secret() {
   const s = process.env.AUTH_SECRET;
   if (!s || s.length < 32) {
     // A guessable secret would let anyone forge a login, so a live site fails closed instead.

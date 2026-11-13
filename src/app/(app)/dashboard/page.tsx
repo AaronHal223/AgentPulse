@@ -4,10 +4,18 @@ import { Sparkles, UserPlus } from "lucide-react";
 import { requireAgent } from "@/lib/auth";
 import { getDb, schema } from "@/lib/db";
 import { getBriefGroups } from "@/lib/brief";
+import { recentClientReactions } from "@/lib/feedback";
+import { listAlerts } from "@/lib/alerts";
+import { callList, clientPulses } from "@/lib/pulse-data";
+import { weeklyReport } from "@/lib/report";
 import { budgetLabel } from "@/lib/profile";
 import { MatchCard } from "@/components/MatchCard";
 import { RunSearchesButton } from "@/components/RunSearchesButton";
 import { EmailBriefButton } from "@/components/EmailBriefButton";
+import { ClientReactions } from "@/components/ClientReactions";
+import { AlertsInbox } from "@/components/AlertsInbox";
+import { CallList } from "@/components/CallList";
+import { WeekSummary } from "@/components/WeekSummary";
 
 function greeting() {
   const h = Number(new Date().toLocaleString("en-US", { hour: "numeric", hour12: false, timeZone: process.env.APP_TIMEZONE || "America/New_York" }));
@@ -17,7 +25,7 @@ function greeting() {
 export default async function Dashboard() {
   const agent = await requireAgent();
   const db = await getDb();
-  const [buyers, groups, [{ total }]] = await Promise.all([
+  const [buyers, groups, [{ total }], reactions, alerts, pulses, report] = await Promise.all([
     db.select().from(schema.buyers).where(and(eq(schema.buyers.agentId, agent.id), eq(schema.buyers.active, true))),
     getBriefGroups(agent.id, 24),
     db
@@ -25,6 +33,10 @@ export default async function Dashboard() {
       .from(schema.matches)
       .innerJoin(schema.buyers, eq(schema.matches.buyerId, schema.buyers.id))
       .where(and(eq(schema.buyers.agentId, agent.id), eq(schema.matches.status, "saved"))),
+    recentClientReactions(agent.id),
+    listAlerts(agent.id, { unreadOnly: true, limit: 5 }),
+    clientPulses(agent.id),
+    weeklyReport(agent.id),
   ]);
 
   const newCount = groups.reduce((n, g) => n + g.matches.length, 0);
@@ -69,6 +81,12 @@ export default async function Dashboard() {
         ))}
       </div>
 
+      <CallList clients={callList(pulses)} />
+
+      <AlertsInbox initial={alerts} title="Alerts" moreHref="/alerts" />
+
+      <ClientReactions reactions={reactions} />
+
       {!buyers.length && (
         <div className="card flex flex-col items-center px-6 py-14 text-center">
           <UserPlus className="text-brand" size={28} />
@@ -89,6 +107,8 @@ export default async function Dashboard() {
           </p>
         </div>
       )}
+
+      <WeekSummary report={report} />
 
       {groups.map((g) => (
         <section key={g.buyer.id} className="space-y-3">

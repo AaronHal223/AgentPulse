@@ -58,6 +58,43 @@ export async function geocodeAnchors(anchors: Anchor[]): Promise<{ anchors: Anch
   return { anchors: out, changed };
 }
 
+type Matrix = { minutes: (number | null)[][]; miles: (number | null)[][] };
+
+/**
+ * Drive minutes and miles between points, from OpenRouteService's matrix. `sources` and
+ * `destinations` are indexes into `points` (all of them when left out). Null when there's no
+ * key or the lookup fails, so callers can fall back to straight-line distance.
+ */
+async function orsMatrix(points: LatLng[], sources?: number[], destinations?: number[]): Promise<Matrix | null> {
+  const k = key();
+  if (!k) return null;
+  try {
+    const res = await fetch(`${ORS}/v2/matrix/driving-car`, {
+      method: "POST",
+      headers: { Authorization: k, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        locations: points.map((p) => [p.lng, p.lat]),
+        ...(sources ? { sources } : {}),
+        ...(destinations ? { destinations } : {}),
+        metrics: ["distance", "duration"],
+        units: "mi",
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) throw new Error(`ORS matrix ${res.status}`);
+    const data = (await res.json()) as { durations?: (number | null)[][]; distances?: (number | null)[][] };
+    const cells = (rows: (number | null)[][] | undefined, convert: (n: number) => number) =>
+      (rows ?? []).map((row) => row.map((n) => (n == null ? null : convert(n))));
+    return {
+      minutes: cells(data.durations, (secs) => Math.round(secs / 60)),
+      miles: cells(data.distances, (mi) => Math.round(mi * 10) / 10),
+    };
+  } catch (err) {
+    console.warn("drive-time lookup failed, falling back to straight-line", err);
+    return null;
+  }
+}
+
 /** Driving minutes + miles from one home to each anchor. */
 export async function distancesFrom(home: LatLng | null, anchors: Anchor[]): Promise<Distance[]> {
   if (!anchors.length) return [];
@@ -65,41 +102,44 @@ export async function distancesFrom(home: LatLng | null, anchors: Anchor[]): Pro
   const result: Distance[] = anchors.map((a) => ({ label: a.label, miles: null, minutes: null }));
   if (!home || !located.length) return result;
 
-  const k = key();
-  if (k) {
-    try {
-      const res = await fetch(`${ORS}/v2/matrix/driving-car`, {
-        method: "POST",
-        headers: { Authorization: k, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          locations: [[home.lng, home.lat], ...located.map((a) => [a.lng, a.lat])],
-          sources: [0],
-          destinations: located.map((_, i) => i + 1),
-          metrics: ["distance", "duration"],
-          units: "mi",
-        }),
-        signal: AbortSignal.timeout(15000),
-      });
-      if (!res.ok) throw new Error(`ORS matrix ${res.status}`);
-      const data = (await res.json()) as { durations?: (number | null)[][]; distances?: (number | null)[][] };
-      located.forEach((a, i) => {
-        const idx = anchors.indexOf(a);
-        const secs = data.durations?.[0]?.[i];
-        const mi = data.distances?.[0]?.[i];
-        result[idx] = {
-          label: a.label,
-          minutes: secs != null ? Math.round(secs / 60) : null,
-          miles: mi != null ? Math.round(mi * 10) / 10 : null,
-        };
-      });
-      return result;
-    } catch (err) {
-      console.warn("drive-time lookup failed, falling back to straight-line", err);
-    }
-  }
-  located.forEach((a) => {
+  const matrix = await orsMatrix([home, ...located], [0], located.map((_, i) => i + 1));
+  located.forEach((a, i) => {
     const idx = anchors.indexOf(a);
-    result[idx] = { label: a.label, minutes: null, miles: Math.round(haversineMiles(home, a) * 10) / 10 };
+    result[idx] = matrix
+      ? { label: a.label, minutes: matrix.minutes[0]?.[i] ?? null, miles: matrix.miles[0]?.[i] ?? null }
+      : { label: a.label, minutes: null, miles: Math.round(haversineMiles(home, a) * 10) / 10 };
   });
   return result;
+}
+
+// Without a routing answer: roads run about 30% longer than a straight line, at about 30 mph.
+const ROAD_FACTOR = 1.3;
+const MINUTES_PER_MILE = 2;
+
+export type DriveMatrix = { minutes: number[][]; miles: number[][]; estimated: boolean };
+
+/** Drive time between every pair of points, for planning a route. Estimated when routing is unavailable. */
+export async function driveMatrix(points: LatLng[]): Promise<DriveMatrix> {
+  const routed = await orsMatrix(points);
+  let estimated = false;
+  const minutes: number[][] = [];
+  const miles: number[][] = [];
+  points.forEach((from, i) => {
+    minutes.push([]);
+    miles.push([]);
+    points.forEach((to, j) => {
+      const routedMinutes = routed?.minutes[i]?.[j];
+      const routedMiles = routed?.miles[i]?.[j];
+      if (routedMinutes != null && routedMiles != null) {
+        minutes[i].push(routedMinutes);
+        miles[i].push(routedMiles);
+        return;
+      }
+      if (i !== j) estimated = true;
+      const guess = haversineMiles(from, to) * ROAD_FACTOR;
+      miles[i].push(Math.round(guess * 10) / 10);
+      minutes[i].push(Math.round(guess * MINUTES_PER_MILE));
+    });
+  });
+  return { minutes, miles, estimated };
 }

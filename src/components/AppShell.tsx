@@ -4,7 +4,9 @@ import { NavLinks, TabBar } from "./NavLinks";
 import { InstallButton } from "./InstallButton";
 import type { Agent } from "@/lib/db/schema";
 
-export function AppShell({ agent, children }: { agent: Agent; children: React.ReactNode }) {
+type Props = { agent: Agent; unreadAlerts: number; children: React.ReactNode };
+
+export function AppShell({ agent, unreadAlerts, children }: Props) {
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-20 border-b border-line bg-paper/90 pt-[env(safe-area-inset-top)] backdrop-blur">
@@ -12,7 +14,7 @@ export function AppShell({ agent, children }: { agent: Agent; children: React.Re
           <Link href="/dashboard" aria-label="AgentPulse home">
             <Logo />
           </Link>
-          <NavLinks />
+          <NavLinks unreadAlerts={unreadAlerts} />
           <div className="ml-auto flex items-center gap-3">
             <InstallButton />
             <span className="hidden text-sm text-muted md:inline">{agent.name}</span>
@@ -23,7 +25,7 @@ export function AppShell({ agent, children }: { agent: Agent; children: React.Re
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-4 pt-6 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:py-10">{children}</main>
-      <TabBar />
+      <TabBar unreadAlerts={unreadAlerts} />
     </div>
   );
 }
