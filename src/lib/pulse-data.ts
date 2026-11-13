@@ -19,10 +19,22 @@ export async function clientPulses(agentId: string, now = new Date()): Promise<C
   const ids = buyers.map((b) => b.id);
   const since = new Date(now.getTime() - PULSE_WINDOW_DAYS * DAY_MS);
 
+  // Only the columns the arithmetic needs: this runs on every dashboard load.
+  const m = schema.matches;
+  const f = schema.matchFeedback;
   const [homes, reactions, links, agentMessages] = await Promise.all([
-    db.select().from(schema.matches).where(inArray(schema.matches.buyerId, ids)),
-    db.select().from(schema.matchFeedback).where(and(inArray(schema.matchFeedback.buyerId, ids), eq(schema.matchFeedback.source, "client"))),
-    db.select().from(schema.shareLinks).where(inArray(schema.shareLinks.buyerId, ids)),
+    db
+      .select({ id: m.id, buyerId: m.buyerId, score: m.score, inArea: m.inArea, status: m.status, sentAt: m.sentAt, listingStatus: m.listingStatus })
+      .from(m)
+      .where(inArray(m.buyerId, ids)),
+    db
+      .select({ buyerId: f.buyerId, matchId: f.matchId, verdict: f.verdict, note: f.note, createdAt: f.createdAt })
+      .from(f)
+      .where(and(inArray(f.buyerId, ids), eq(f.source, "client"))),
+    db
+      .select({ buyerId: schema.shareLinks.buyerId, lastViewedAt: schema.shareLinks.lastViewedAt })
+      .from(schema.shareLinks)
+      .where(inArray(schema.shareLinks.buyerId, ids)),
     db
       .select({ buyerId: schema.messages.buyerId, createdAt: schema.messages.createdAt })
       .from(schema.messages)
