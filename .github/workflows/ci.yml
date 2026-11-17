@@ -1,4 +1,4 @@
-# Checks every push and pull request: type-check, production build, and an end-to-end smoke test.
+# Checks every push and pull request: type-check, unit tests, production build, and an end-to-end smoke test.
 # Render waits for this to pass before deploying (autoDeployTrigger: checksPass in render.yaml).
 name: CI
 
@@ -28,6 +28,8 @@ jobs:
       - run: npm ci
       - name: Type-check
         run: npm run lint
+      - name: Unit tests
+        run: npm test
       - name: Build (with local test database)
         run: npm run build
       - name: Start app

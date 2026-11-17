@@ -9,7 +9,7 @@ import {
   type Part,
   type Tool,
 } from "@google/genai";
-import { AiServiceError, type AgentRequest, type AgentResult, type ChatTurn } from "./types";
+import { AiServiceError, type AgentRequest, type AgentResult, type AudioClip, type ChatTurn } from "./types";
 
 // 2.5 Flash is the newest model that still gets free Google Search on the free tier.
 const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
@@ -73,8 +73,13 @@ async function generate(params: GenerateContentParameters): Promise<GenerateCont
   }
 }
 
-const toContents = (turns: ChatTurn[]): Content[] =>
-  turns.map((t) => ({ role: t.role === "assistant" ? "model" : "user", parts: [{ text: t.content }] }));
+/** The conversation in Gemini's shape. A recording rides along with the last message. */
+function toContents(turns: ChatTurn[], audio?: AudioClip): Content[] {
+  const contents: Content[] = turns.map((t) => ({ role: t.role === "assistant" ? "model" : "user", parts: [{ text: t.content }] }));
+  const last = contents[contents.length - 1];
+  if (audio && last) last.parts!.push({ inlineData: { mimeType: audio.mimeType, data: audio.base64 } });
+  return contents;
+}
 
 /** Visible text of a reply (skips thinking and function-call parts). */
 function replyText(res: GenerateContentResponse): string {
@@ -159,7 +164,7 @@ const webResearchTool: FunctionDeclaration = {
 async function researchThenAnswer(req: AgentRequest, finalTool: string): Promise<AgentResult> {
   const tool = req.tools.find((t) => t.name === finalTool);
   if (!tool) throw new Error(`Unknown final tool ${finalTool}`);
-  const history = toContents(req.messages);
+  const history = toContents(req.messages, req.audio);
   let notes = "";
   let sources: string[] | undefined;
 
@@ -231,7 +236,7 @@ async function chatLoop(req: AgentRequest): Promise<AgentResult> {
   const lookups = req.web?.searches ?? 0;
   if (lookups) declarations.push(webResearchTool);
 
-  const contents = toContents(req.messages);
+  const contents = toContents(req.messages, req.audio);
   const maxSteps = req.maxSteps ?? 12;
   let lastText = "";
   let used = 0;

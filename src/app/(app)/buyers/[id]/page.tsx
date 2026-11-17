@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { requireAgent } from "@/lib/auth";
 import { getDb, schema } from "@/lib/db";
+import { aiHearsAudio } from "@/lib/ai/provider";
 import { BuyerWorkspace } from "@/components/BuyerWorkspace";
 
 export default async function BuyerPage({ params }: { params: Promise<{ id: string }> }) {
@@ -16,16 +17,17 @@ export default async function BuyerPage({ params }: { params: Promise<{ id: stri
     .limit(1);
   if (!buyer) notFound();
 
-  const [messages, matches] = await Promise.all([
+  const [messages, matches, feedback] = await Promise.all([
     db.select().from(schema.messages).where(eq(schema.messages.buyerId, id)).orderBy(asc(schema.messages.createdAt)),
     db.select().from(schema.matches).where(eq(schema.matches.buyerId, id)).orderBy(desc(schema.matches.score)),
+    db.select().from(schema.matchFeedback).where(eq(schema.matchFeedback.buyerId, id)),
   ]);
 
   return (
     <div>
       <Link href="/buyers" className="text-sm text-muted hover:text-ink">← All clients</Link>
       <div className="mt-2">
-        <BuyerWorkspace buyer={buyer} messages={messages.slice(-60)} matches={matches} />
+        <BuyerWorkspace buyer={buyer} messages={messages.slice(-60)} matches={matches} feedback={feedback} canTranscribeAudio={aiHearsAudio()} />
       </div>
     </div>
   );

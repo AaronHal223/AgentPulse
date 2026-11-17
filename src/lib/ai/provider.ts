@@ -18,9 +18,14 @@ export function aiConfigured(): boolean {
   return Boolean(aiProvider() === "claude" ? process.env.ANTHROPIC_API_KEY : process.env.GEMINI_API_KEY);
 }
 
+/** True when the active provider can listen to a recording. Claude's API takes text and images only. */
+export function aiHearsAudio(): boolean {
+  return aiProvider() === "gemini";
+}
+
 export function runAgent(req: AgentRequest): Promise<AgentResult> {
   return aiProvider() === "claude" ? runClaude(req) : runGemini(req);
 }
 
-export type { AgentRequest, AgentResult, ChatTurn, ClientToolHandler, ToolSpec } from "./types";
+export type { AgentRequest, AgentResult, AudioClip, ChatTurn, ClientToolHandler, ToolSpec } from "./types";
 export { AiServiceError } from "./types";

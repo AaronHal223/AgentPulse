@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySession } from "@/lib/session";
 
-const APP_PREFIXES = ["/dashboard", "/buyers", "/settings"];
+const APP_PREFIXES = ["/dashboard", "/buyers", "/alerts", "/report", "/settings"];
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -19,5 +19,5 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/buyers/:path*", "/settings/:path*", "/login", "/signup"],
+  matcher: ["/dashboard/:path*", "/buyers/:path*", "/alerts/:path*", "/report/:path*", "/settings/:path*", "/login", "/signup"],
 };

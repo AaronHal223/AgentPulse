@@ -1,4 +1,5 @@
-# Daily brief: searches for new homes for every client, then emails each agent their brief.
+# Daily brief: searches for new homes for every client, re-checks saved homes for price drops
+# and status changes (which raise alerts), then emails each agent their brief.
 # Runs every morning at about 6:30 AM Eastern, or by hand (Actions → Daily brief → Run workflow).
 # Needs one repository secret (Settings → Secrets and variables → Actions → New repository secret):
 #   CRON_SECRET  the same value as CRON_SECRET on Render
@@ -26,7 +27,7 @@ jobs:
         run: |
           if [ -z "$CRON_SECRET" ]; then echo "::error::Add the CRON_SECRET repository secret (same value as on Render)."; exit 1; fi
           for i in $(seq 1 6); do curl -sS --fail --max-time 90 "$APP_URL/api/live" && break; sleep 10; done
-      - name: Search for new homes for every client
+      - name: Search for new homes and re-check saved ones
         run: |
           for i in $(seq 1 40); do
             res=$(curl -sS --max-time 330 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/search" || echo '{"remaining":1}')
