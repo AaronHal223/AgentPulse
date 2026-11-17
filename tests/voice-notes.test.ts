@@ -94,9 +94,11 @@ test("recordings go to the AI as audio and come back as text", async () => {
 
 test("with Claude selected, a recording is declined with a clear message", async () => {
   process.env.AI_PROVIDER = "claude";
+  process.env.ANTHROPIC_API_KEY = "test-key";
   try {
     await assert.rejects(() => transcribeAudio({ mimeType: "audio/webm", base64: "AAAA" }), /can't listen to recordings/);
   } finally {
+    delete process.env.ANTHROPIC_API_KEY;
     process.env.AI_PROVIDER = "gemini";
   }
 });

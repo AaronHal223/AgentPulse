@@ -175,7 +175,7 @@ test("the morning run queues clients with stale saved homes, and a failed re-che
   delete process.env.ANTHROPIC_API_KEY;
   try {
     const result = await recheckStep({ agent, buyer });
-    assert.match(result.error ?? "", /ANTHROPIC_API_KEY is not set/);
+    assert.match(result.error ?? "", /isn't switched on/);
   } finally {
     process.env.AI_PROVIDER = "gemini";
     process.env.GEMINI_BASE_URL = realUrl;
