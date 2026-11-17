@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { handler } from "@/lib/api";
 import { assertCron } from "@/lib/cron";
+import { recordError, recordJobRun } from "@/lib/monitor";
 import { dueForRecheck, dueForSearch, recheckStep, searchStep, type Due, type StepResult } from "@/lib/daily";
 
 export const maxDuration = 300;
@@ -30,6 +31,9 @@ export const GET = handler(async (req: Request) => {
 
   const searchesLeft = await work(await dueForSearch(), searchStep);
   const rechecksLeft = await work(await dueForRecheck(), recheckStep);
-  const errors = done.filter((d) => d.error).map((d) => `${d.buyerId}: ${d.error}`);
-  return NextResponse.json({ processed: done.length, remaining: searchesLeft + rechecksLeft, errors });
+  const failed = done.filter((d) => d.error);
+  const remaining = searchesLeft + rechecksLeft;
+  if (failed.length) await recordError("morning run", `${failed.length} of ${done.length} step(s) failed. First: ${failed[0].error}`);
+  if (done.length) await recordJobRun("search", { processed: done.length, failed: failed.length, remaining });
+  return NextResponse.json({ processed: done.length, remaining, errors: failed.map((d) => `${d.buyerId}: ${d.error}`) });
 });

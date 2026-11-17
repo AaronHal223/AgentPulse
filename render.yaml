@@ -42,6 +42,8 @@ services:
         sync: false
       - key: VAPID_SUBJECT
         sync: false # mailto:you@example.com (optional when APP_URL is an https address)
+      - key: OWNER_EMAIL
+        sync: false # your login email: unlocks /status and error emails
       - key: APP_TIMEZONE
         value: America/New_York
       - key: NODE_OPTIONS
