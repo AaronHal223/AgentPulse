@@ -19,6 +19,9 @@ An AI copilot for real estate agents. Tell it about your clients in plain words,
 | **Map and commute** | See a client's homes on a map with pins coloured by score. Pick up to two important places and a longest drive; homes over the limit are faded or hidden. |
 | **Follow-up drafts** | The AI writes a short text or email about the newest matches in your voice. You edit it and send it from your own phone. Nothing is sent for you. |
 | **Tour planner** | Pick 2–6 homes and get the shortest driving order with a suggested time for each. |
+| **Getting started** | New agents see a short checklist that ticks itself off, and can practice on a made-up sample client before adding a real one. A **?** next to scores, alerts and the pulse explains each in a sentence. On phones, a client's page is split into **Homes · Profile · Notes · Chat** tabs. |
+| **Your account** | Forgot-password emails, change password or login email (other devices are logged out), download all your data, delete your account. Deleting a client gives you a few seconds to **Undo**. Clients can be searched once you have more than a handful. |
+| **Site status** | The site owner (`OWNER_EMAIL`) gets a status page at `/status` showing whether the database, AI, email, drive times, notifications and the morning run are working, plus recent problems. They're emailed when something breaks (at most once an hour). |
 | **Client pulse and weekly report** | An engagement meter per client, a **Who to call today** list on the dashboard, and a weekly report of homes found, sent, client reactions, alerts and time saved. |
 
 ## Try it in 2 minutes (no API keys)
@@ -67,6 +70,7 @@ Switching is just changing that one value on Render; nothing else changes. Both 
 | `ORS_API_KEY` | Geocoding + drive times | Free at [openrouteservice.org](https://openrouteservice.org/dev/#/signup) |
 | `RESEND_API_KEY`, `EMAIL_FROM` | Emailing the daily brief | [resend.com](https://resend.com) |
 | `APP_URL` | Links in the brief email and client share links | Your site address |
+| `OWNER_EMAIL` | Who sees `/status` and gets error emails (optional) | Your login email |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | Phone notifications (optional) | `npx web-push generate-vapid-keys` |
 | `VAPID_SUBJECT` | Contact for the push services (optional when `APP_URL` is an https address) | `mailto:you@example.com` |
 
@@ -172,6 +176,8 @@ Tech: Next.js (App Router), TypeScript, Tailwind CSS, Drizzle ORM + Postgres, Ge
 - **Listing data comes from the open web.** Some portals block automated page reads; when that happens the AI uses search results and the same listing on other sites. Always confirm price and availability on the listing before sending it to a client.
 - **Costs.** On Gemini's free tier, nothing (within the daily limit). Paid, each search uses tokens plus web-search fees. See [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing) and [Claude pricing](https://www.anthropic.com/pricing).
 - **Privacy.** Every agent's clients and homes are private to their account.
+- **Backups.** Neon's free plan can restore the database to any moment in the last 6 hours; scheduled daily snapshots need a paid Neon plan. Agents can download their own data any time from Settings.
+- **Password reset needs email.** Without `RESEND_API_KEY` the forgot-password page says so instead of sending a link.
 - **Re-checks use the AI.** Each morning's look at saved homes is one more AI request per client with saved homes, so it counts toward Gemini's free daily limit. If the limit runs out, the re-check simply waits for the next day.
 - **Time saved is an estimate.** The weekly report shows the per-item minutes it uses so you can judge it.
 - **Tour times are suggestions.** Confirm each slot with the listing agent. Without `ORS_API_KEY`, drive times between homes are rough straight-line estimates and the planner says so.

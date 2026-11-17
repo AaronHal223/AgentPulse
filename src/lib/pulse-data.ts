@@ -14,7 +14,7 @@ const latest = (dates: (Date | null | undefined)[]) => dates.reduce<Date | null>
 /** The pulse of each of this agent's active clients, from their last two weeks of activity. */
 export async function clientPulses(agentId: string, now = new Date()): Promise<ClientPulse[]> {
   const db = await getDb();
-  const buyers = await db.select().from(schema.buyers).where(and(eq(schema.buyers.agentId, agentId), eq(schema.buyers.active, true)));
+  const buyers = await db.select().from(schema.buyers).where(and(eq(schema.buyers.agentId, agentId), eq(schema.buyers.active, true), eq(schema.buyers.isSample, false)));
   if (!buyers.length) return [];
   const ids = buyers.map((b) => b.id);
   const since = new Date(now.getTime() - PULSE_WINDOW_DAYS * DAY_MS);

@@ -1,13 +1,10 @@
 import Link from "next/link";
 import { desc, eq, sql } from "drizzle-orm";
-import { MapPin, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { requireAgent } from "@/lib/auth";
 import { getDb, schema } from "@/lib/db";
-import { budgetLabel } from "@/lib/profile";
-import { timeAgo } from "@/lib/format";
 import { clientPulses } from "@/lib/pulse-data";
-import { ScoreBadge } from "@/components/ScoreBadge";
-import { PulseMeter } from "@/components/PulseMeter";
+import { ClientList } from "@/components/ClientList";
 
 export default async function BuyersPage() {
   const agent = await requireAgent();
@@ -44,43 +41,7 @@ export default async function BuyersPage() {
           <Link href="/buyers/new" className="btn-primary mt-5">Add clients</Link>
         </div>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
-          {rows.map(({ buyer, matchCount, bestScore }) => (
-            <Link key={buyer.id} href={`/buyers/${buyer.id}`} className={`card group flex gap-4 p-5 transition hover:border-ink ${buyer.active ? "" : "opacity-60"}`}>
-              {bestScore ? (
-                <ScoreBadge score={bestScore} />
-              ) : (
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-paper font-serif text-lg font-semibold text-ink-soft">
-                  {buyer.name.charAt(0).toUpperCase()}
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-baseline justify-between gap-2">
-                  <h2 className="truncate font-serif text-lg font-semibold group-hover:underline">{buyer.name}</h2>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${buyer.intent === "rent" ? "bg-amber-soft text-amber" : "bg-brand-soft text-brand"}`}>
-                    {buyer.intent === "rent" ? "Renting" : "Buying"}
-                  </span>
-                </div>
-                <p className="text-sm text-ink-soft">
-                  {budgetLabel(buyer)}
-                  {buyer.bedsMin ? ` · ${buyer.bedsMin}+ bd` : ""}
-                </p>
-                {buyer.areas.length > 0 && (
-                  <p className="mt-1 flex items-center gap-1 truncate text-sm text-muted">
-                    <MapPin size={13} className="shrink-0" /> {buyer.areas.join(", ")}
-                  </p>
-                )}
-                <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-                  <span>
-                    {matchCount} home{matchCount === 1 ? "" : "s"} · searched {timeAgo(buyer.lastSearchedAt)}
-                    {!buyer.active && " · paused"}
-                  </span>
-                  {pulses.has(buyer.id) && <PulseMeter pulse={pulses.get(buyer.id)!} />}
-                </p>
-              </div>
-            </Link>
-          ))}
-        </div>
+        <ClientList rows={rows.map((r) => ({ ...r, pulse: pulses.get(r.buyer.id) ?? null }))} />
       )}
     </div>
   );
