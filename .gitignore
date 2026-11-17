@@ -10,4 +10,9 @@ next-env.d.ts
 .vercel
 .neon
 .env*.local
+
+# Local AI-assistant tooling
 AGENTS.md
+CLAUDE.md
+.claude/
+skills-lock.json
