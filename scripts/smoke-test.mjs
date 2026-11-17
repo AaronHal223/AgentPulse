@@ -61,6 +61,25 @@ async function shareLinkChecks(buyerId) {
   cookie = agentCookie;
 }
 
+/** Account basics: sample client, data export, password change, and what an ordinary agent can't see. */
+async function accountChecks(email, password) {
+  const sample = await (await req("/api/sample", { method: "POST" })).json();
+  await req(`/buyers/${sample.id}`);
+  await req("/api/sample", { method: "DELETE" });
+  await req(`/buyers/${sample.id}`, { expect: 404 });
+
+  const exported = await (await req("/api/account/export")).text();
+  if (!exported.includes(email) || exported.includes("passwordHash")) {
+    failures++;
+    console.log("✗ the data export should contain the account and never the password");
+  }
+  await req("/status", { expect: 404 });
+  await req("/api/account/password", { method: "POST", body: { current: "wrong-password", next: "another-long-password" }, expect: 403 });
+  await req("/api/account/password", { method: "POST", body: { current: password, next: "short" }, expect: 400 });
+  await req("/api/account", { method: "DELETE", body: { password: "wrong-password" }, expect: 403 });
+  await req("/api/account/welcome", { method: "POST" });
+}
+
 /** Alerts and notification settings answer for the logged-in agent and reject bad input. */
 async function alertChecks() {
   const inbox = await (await req("/api/alerts")).json();
@@ -129,6 +148,7 @@ async function main() {
     await req(`/api/buyers/${id}/tour`, { method: "POST", body: { matchIds: ["only-one"], startTime: "10:00", visitMinutes: 30 }, expect: 400 });
     await req("/api/buyers/not-my-client/tour", { method: "POST", body: { matchIds: ["a", "b"], startTime: "10:00", visitMinutes: 30 }, expect: 404 });
     await req("/report");
+    await accountChecks(email, "smoke-test-123");
     // Home feedback routes only answer for homes the agent owns.
     await req("/api/matches/not-a-real-home", { method: "PATCH", body: { status: "saved" }, expect: 404 });
     await req("/api/matches/not-a-real-home/why", { expect: 404 });
@@ -179,6 +199,12 @@ async function main() {
   await req("/api/buyers/anything/follow-up", { method: "POST", body: { channel: "text" }, expect: 401 });
   await req("/api/buyers/anything/tour", { method: "POST", body: {}, expect: 401 });
   await req("/report", { expect: 307 });
+  await req("/status", { expect: 307 });
+  for (const p of ["/forgot", "/reset", "/reset?token=abc"]) await req(p);
+  await req("/api/auth/reset", { method: "POST", body: { token: "x".repeat(40), password: "a-long-enough-password" }, expect: 400 });
+  await req("/api/account/export", { expect: 401 });
+  await req("/api/account", { method: "DELETE", body: { password: "x" }, expect: 401 });
+  await req("/api/sample", { method: "POST", expect: 401 });
 
   // Cron endpoints refuse requests without the secret.
   await req("/api/cron/send-briefs", { expect: [401, 503] });
