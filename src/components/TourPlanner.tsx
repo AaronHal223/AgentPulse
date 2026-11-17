@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Car, Check, Copy, ExternalLink, Route, X } from "lucide-react";
+import { CalendarPlus, Car, Check, Copy, ExternalLink, Route, X } from "lucide-react";
+import { atClock, toIcs } from "@/lib/ics";
 import type { Buyer, Match } from "@/lib/db/schema";
 import { TOUR_MAX_STOPS, TOUR_MIN_STOPS } from "@/lib/tour";
 import type { Tour } from "@/lib/tours";
@@ -21,8 +22,32 @@ function itinerary(buyer: Buyer, tour: Tour) {
   return `Showing tour for ${buyer.name}\n${lines.join("\n")}\nRoute: ${tour.mapsUrl}`;
 }
 
+const tomorrow = () => {
+  const d = new Date(Date.now() + 24 * 3600 * 1000);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+/** Saves the tour as a calendar file; on phones this opens straight into the Calendar app. */
+function downloadCalendar(buyer: Buyer, tour: Tour, day: string) {
+  const ics = toIcs(
+    tour.stops.map((s, i) => ({
+      uid: `${s.matchId}-${day}`,
+      title: `Showing ${i + 1}/${tour.stops.length}: ${s.address.split(",")[0]} (${buyer.name})`,
+      start: atClock(day, s.arrive),
+      end: atClock(day, s.leave),
+      location: s.address,
+      notes: `Route for the whole tour: ${tour.mapsUrl}`,
+    })),
+  );
+  const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar;charset=utf-8" }));
+  const a = Object.assign(document.createElement("a"), { href: url, download: `showings-${day}.ics` });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 /** Picks the best driving order for 2–6 homes and suggests a time slot for each. */
 export function TourPlanner({ buyer, homes, onRemove, onClose }: Props) {
+  const [day, setDay] = useState(tomorrow);
   const [startTime, setStartTime] = useState("10:00");
   const [visitMinutes, setVisitMinutes] = useState(30);
   const [tour, setTour] = useState<Tour | null>(null);
@@ -82,6 +107,10 @@ export function TourPlanner({ buyer, homes, onRemove, onClose }: Props) {
 
       <div className="flex flex-wrap items-end gap-3">
         <div>
+          <label className="label" htmlFor="tour-day">Day</label>
+          <input id="tour-day" type="date" value={day} onChange={(e) => setDay(e.target.value)} className="input !w-40" />
+        </div>
+        <div>
           <label className="label" htmlFor="tour-start">Start at</label>
           <input id="tour-start" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="input !w-32" />
         </div>
@@ -127,6 +156,9 @@ export function TourPlanner({ buyer, homes, onRemove, onClose }: Props) {
           <div className="flex flex-wrap gap-2">
             <button onClick={() => copy(tour)} className="btn-ghost !px-3 !py-1.5">
               {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? "Copied" : "Copy itinerary"}
+            </button>
+            <button onClick={() => downloadCalendar(buyer, tour, day)} disabled={!day} className="btn-ghost !px-3 !py-1.5">
+              <CalendarPlus size={14} /> Add to calendar
             </button>
             <a href={tour.mapsUrl} target="_blank" rel="noreferrer" className="btn-ghost !px-3 !py-1.5">
               <ExternalLink size={14} /> Open route in Maps
