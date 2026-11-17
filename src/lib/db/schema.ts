@@ -8,6 +8,7 @@ import {
   real,
   uniqueIndex,
   index,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 
 const id = () =>
@@ -301,6 +302,17 @@ export const voiceNotes = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("voice_notes_buyer_idx").on(t.buyerId)],
+);
+
+/** Requests made to paid-beyond-free services this month, so the app can stop before a bill. */
+export const apiUsage = pgTable(
+  "api_usage",
+  {
+    service: text("service").notNull(),
+    month: text("month").notNull(), // "2026-11"
+    count: integer("count").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.service, t.month] })],
 );
 
 export type Agent = typeof agents.$inferSelect;

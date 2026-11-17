@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
-import { Check, Copy, MessageSquareText, Send } from "lucide-react";
+import { Check, Copy, MessageSquareText, Send, TriangleAlert } from "lucide-react";
+import { fairHousingFlags } from "@/lib/fair-housing";
 import type { Buyer } from "@/lib/db/schema";
 import { api } from "./fetcher";
 import { shareText } from "./share";
@@ -63,6 +64,8 @@ export function FollowUpDraft({ buyer }: { buyer: Buyer }) {
   }
 
   const link = draft && composerLink(channel, buyer, draft);
+  // Checked as the agent types, so an edit that adds risky wording is caught too.
+  const flags = draft ? fairHousingFlags(`${draft.subject ?? ""}\n${draft.body}`) : [];
 
   return (
     <div className="card p-5">
@@ -91,6 +94,20 @@ export function FollowUpDraft({ buyer }: { buyer: Buyer }) {
             <input value={draft.subject} onChange={(e) => setDraft({ ...draft, subject: e.target.value })} className="input font-semibold" aria-label="Subject" />
           )}
           <textarea value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })} rows={channel === "email" ? 9 : 5} className="input" aria-label="Message" />
+          {flags.length > 0 && (
+            <div className="rounded-lg border border-amber/40 bg-amber-soft px-3 py-2 text-sm text-ink-soft" role="alert">
+              <p className="flex items-center gap-1.5 font-semibold text-amber">
+                <TriangleAlert size={14} /> Check this wording before sending (fair housing)
+              </p>
+              <ul className="mt-1 space-y-0.5">
+                {flags.map((f, i) => (
+                  <li key={i}>
+                    “{f.phrase}”: {f.why}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <div className="flex flex-wrap gap-2">
             <button onClick={() => copy(draft)} className="btn-ghost !px-3 !py-1.5">
               {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? "Copied" : "Copy"}
