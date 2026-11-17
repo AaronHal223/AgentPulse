@@ -1,6 +1,9 @@
+import Link from "next/link";
 import { requireAgent } from "@/lib/auth";
+import { isOwner } from "@/lib/monitor";
 import { SettingsForm } from "@/components/SettingsForm";
 import { PushToggle } from "@/components/PushToggle";
+import { AccountPanel } from "@/components/AccountPanel";
 
 export default async function SettingsPage() {
   const agent = await requireAgent();
@@ -22,6 +25,12 @@ export default async function SettingsPage() {
         }}
       />
       <PushToggle />
+      <AccountPanel email={agent.email} />
+      {isOwner(agent) && (
+        <Link href="/status" className="card flex items-center justify-between px-4 py-3 text-sm font-medium hover:border-ink">
+          Site status (only you can see this) <span className="text-brand">Open →</span>
+        </Link>
+      )}
     </div>
   );
 }

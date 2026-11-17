@@ -28,6 +28,48 @@ export const agents = pgTable("agents", {
   briefEmail: text("brief_email"),
   briefEnabled: boolean("brief_enabled").notNull().default(true),
   lastBriefAt: timestamp("last_brief_at", { withTimezone: true }),
+  // Raised on a password change or reset, which logs out every other device.
+  sessionVersion: integer("session_version").notNull().default(0),
+  // When the agent closed the getting-started checklist.
+  welcomeDismissedAt: timestamp("welcome_dismissed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** One-time links for resetting a forgotten password. Only a hash of each link is kept. */
+export const passwordResets = pgTable(
+  "password_resets",
+  {
+    id: id(),
+    agentId: text("agent_id")
+      .notNull()
+      .references(() => agents.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("password_resets_agent_idx").on(t.agentId)],
+);
+
+/** Server problems worth the owner's attention, shown on the status page. */
+export const appErrors = pgTable(
+  "app_errors",
+  {
+    id: id(),
+    source: text("source").notNull(), // "api /api/buyers/[id]/search", "morning run", "browser"
+    message: text("message").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("app_errors_created_idx").on(t.createdAt)],
+);
+
+/** One line per morning run, so the status page can say when it last worked. */
+export const jobRuns = pgTable("job_runs", {
+  id: id(),
+  job: text("job").notNull(), // "search" | "briefs"
+  processed: integer("processed").notNull().default(0),
+  failed: integer("failed").notNull().default(0),
+  remaining: integer("remaining").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -66,6 +108,8 @@ export const buyers = pgTable(
     notes: text("notes"),
     aiSummary: text("ai_summary"),
     active: boolean("active").notNull().default(true),
+    // A practice client made from built-in example data. Never searched or emailed about.
+    isSample: boolean("is_sample").notNull().default(false),
     lastSearchedAt: timestamp("last_searched_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -269,3 +313,5 @@ export type ShareLink = typeof shareLinks.$inferSelect;
 export type Alert = typeof alerts.$inferSelect;
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 export type VoiceNote = typeof voiceNotes.$inferSelect;
+export type AppError = typeof appErrors.$inferSelect;
+export type JobRun = typeof jobRuns.$inferSelect;

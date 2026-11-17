@@ -27,6 +27,6 @@ export const POST = handler(async (req: Request) => {
   if (!agent || !valid) throw new HttpError(401, "Email or password is incorrect.");
 
   reset(`login:email:${body.email}`);
-  await startSession(agent.id);
+  await startSession(agent);
   return NextResponse.json({ ok: true });
 });

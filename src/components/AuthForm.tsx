@@ -53,7 +53,10 @@ export function AuthForm({ mode, inviteRequired = false }: { mode: "login" | "si
         <input id="email" name="email" type="email" required className="input" autoComplete="email" />
       </div>
       <div>
-        <label className="label" htmlFor="password">Password</label>
+        <div className="flex items-baseline justify-between">
+          <label className="label" htmlFor="password">Password</label>
+          {mode === "login" && <Link href="/forgot" className="text-xs font-medium text-muted hover:text-ink hover:underline">Forgot password?</Link>}
+        </div>
         <input
           id="password"
           name="password"
