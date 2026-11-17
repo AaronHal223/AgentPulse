@@ -24,22 +24,35 @@ export function secret() {
   return new TextEncoder().encode(s);
 }
 
-export async function signSession(agentId: string) {
-  return new SignJWT({ sub: agentId })
+/**
+ * `version` is the agent's session version when the session started. Raising it in the
+ * database (password change or reset) makes every older session invalid.
+ */
+export async function signSession(agentId: string, version = 0) {
+  return new SignJWT({ sub: agentId, ver: version })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(`${MAX_AGE_SECONDS}s`)
     .sign(secret());
 }
 
-export async function verifySession(token: string | undefined): Promise<string | null> {
+export type SessionClaims = { agentId: string; version: number };
+
+export async function readSession(token: string | undefined): Promise<SessionClaims | null> {
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secret(), { algorithms: ["HS256"] });
-    return typeof payload.sub === "string" ? payload.sub : null;
+    if (typeof payload.sub !== "string") return null;
+    // Sessions from before versions existed count as version 0.
+    return { agentId: payload.sub, version: typeof payload.ver === "number" ? payload.ver : 0 };
   } catch {
     return null;
   }
+}
+
+/** The agent id in a valid cookie. Doesn't check the version; that needs the database. */
+export async function verifySession(token: string | undefined): Promise<string | null> {
+  return (await readSession(token))?.agentId ?? null;
 }
 
 export const sessionCookieOptions = {
