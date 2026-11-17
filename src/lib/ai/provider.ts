@@ -18,6 +18,15 @@ export function aiConfigured(): boolean {
   return Boolean(aiProvider() === "claude" ? process.env.ANTHROPIC_API_KEY : process.env.GEMINI_API_KEY);
 }
 
+/**
+ * False while running on Gemini's free tier, where Google may use what's sent to improve its
+ * products. Set GEMINI_PAID_TIER=true once billing is on in Google AI Studio. Claude's API
+ * doesn't train on what it's sent.
+ */
+export function aiIsPrivate(): boolean {
+  return aiProvider() === "claude" || process.env.GEMINI_PAID_TIER?.trim().toLowerCase() === "true";
+}
+
 /** True when the active provider can listen to a recording. Claude's API takes text and images only. */
 export function aiHearsAudio(): boolean {
   return aiProvider() === "gemini";

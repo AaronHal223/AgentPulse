@@ -21,6 +21,8 @@ An AI copilot for real estate agents. Tell it about your clients in plain words,
 | **Tour planner** | Pick 2–6 homes and get the shortest driving order with a suggested time for each. |
 | **Getting started** | New agents see a short checklist that ticks itself off, and can practice on a made-up sample client before adding a real one. A **?** next to scores, alerts and the pulse explains each in a sentence. On phones, a client's page is split into **Homes · Profile · Notes · Chat** tabs. |
 | **Your account** | Forgot-password emails, change password or login email (other devices are logged out), download all your data, delete your account. Deleting a client gives you a few seconds to **Undo**. Clients can be searched once you have more than a handful. |
+| **Real listings** | With a free RentCast key, searches start from live MLS listings (sale and rentals) and the AI only scores them, so prices, beds and addresses come straight from the listing data. The app stops at 40 requests a month to stay on RentCast's free plan, then searches the web until the next month. |
+| **Fair-housing check** | Wording that could read as steering ("perfect for families", "safe neighborhood", "great schools") is left out of AI blurbs and flagged in follow-up drafts as the agent types. |
 | **Site status** | The site owner (`OWNER_EMAIL`) gets a status page at `/status` showing whether the database, AI, email, drive times, notifications and the morning run are working, plus recent problems. They're emailed when something breaks (at most once an hour). |
 | **Client pulse and weekly report** | An engagement meter per client, a **Who to call today** list on the dashboard, and a weekly report of homes found, sent, client reactions, alerts and time saved. |
 
@@ -70,6 +72,10 @@ Switching is just changing that one value on Render; nothing else changes. Both 
 | `ORS_API_KEY` | Geocoding + drive times | Free at [openrouteservice.org](https://openrouteservice.org/dev/#/signup) |
 | `RESEND_API_KEY`, `EMAIL_FROM` | Emailing the daily brief | [resend.com](https://resend.com) |
 | `APP_URL` | Links in the brief email and client share links | Your site address |
+| `RENTCAST_API_KEY` | Live MLS listings (optional) | Free at [app.rentcast.io](https://app.rentcast.io/app/api) |
+| `RENTCAST_MONTHLY_LIMIT` | Stop before RentCast bills (default 40; free plan is 50) | — |
+| `AI_DAILY_SEARCHES` | Most scheduled searches a day (default 20) | — |
+| `GEMINI_PAID_TIER` | Set to `true` once Gemini billing is on, which turns off the test-mode privacy warning | — |
 | `OWNER_EMAIL` | Who sees `/status` and gets error emails (optional) | Your login email |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | Phone notifications (optional) | `npx web-push generate-vapid-keys` |
 | `VAPID_SUBJECT` | Contact for the push services (optional when `APP_URL` is an https address) | `mailto:you@example.com` |
@@ -83,6 +89,10 @@ AgentPulse is an installable web app — one codebase is both the website and th
 - **Computer:** Chrome or Edge shows an install icon in the address bar.
 
 It opens full-screen with its own icon, a bottom tab bar, and a friendly offline screen. Updates arrive automatically — no app store.
+
+### Keeping it awake
+
+Render's free plan sleeps after 15 quiet minutes, and the first visit after that takes about a minute. The **Keep awake** GitHub workflow tries to prevent this, but GitHub only runs it a few times a day. For a site that's always quick, add a free monitor at [uptimerobot.com](https://uptimerobot.com): a new HTTP monitor for `https://<your-app>.onrender.com/api/live` every 5 minutes. (One always-on service fits inside Render's free 750 hours a month.)
 
 ### Phone notifications
 
@@ -178,6 +188,7 @@ Tech: Next.js (App Router), TypeScript, Tailwind CSS, Drizzle ORM + Postgres, Ge
 - **Privacy.** Every agent's clients and homes are private to their account.
 - **Backups.** Neon's free plan can restore the database to any moment in the last 6 hours; scheduled daily snapshots need a paid Neon plan. Agents can download their own data any time from Settings.
 - **Password reset needs email.** Without `RESEND_API_KEY` the forgot-password page says so instead of sending a link.
+- **Saving AI calls.** Clients nobody has touched in two weeks are searched every three days instead of daily, and scheduled searches stop at `AI_DAILY_SEARCHES` a day. Anyone left over goes first the next morning.
 - **Re-checks use the AI.** Each morning's look at saved homes is one more AI request per client with saved homes, so it counts toward Gemini's free daily limit. If the limit runs out, the re-check simply waits for the next day.
 - **Time saved is an estimate.** The weekly report shows the per-item minutes it uses so you can judge it.
 - **Tour times are suggestions.** Confirm each slot with the listing agent. Without `ORS_API_KEY`, drive times between homes are rough straight-line estimates and the planner says so.
