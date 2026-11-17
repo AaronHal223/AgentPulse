@@ -42,6 +42,14 @@ services:
         sync: false
       - key: VAPID_SUBJECT
         sync: false # mailto:you@example.com (optional when APP_URL is an https address)
+      - key: RENTCAST_API_KEY
+        sync: false # optional: live MLS listings, https://app.rentcast.io/app/api
+      - key: RENTCAST_MONTHLY_LIMIT
+        value: "40" # stays inside RentCast's free 50 requests a month
+      - key: AI_DAILY_SEARCHES
+        value: "20"
+      - key: GEMINI_PAID_TIER
+        sync: false # true once Gemini billing is on
       - key: OWNER_EMAIL
         sync: false # your login email: unlocks /status and error emails
       - key: APP_TIMEZONE

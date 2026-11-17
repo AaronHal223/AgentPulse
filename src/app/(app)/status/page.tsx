@@ -5,7 +5,9 @@ import { requireAgent } from "@/lib/auth";
 import { getDb, schema } from "@/lib/db";
 import { timeAgo } from "@/lib/format";
 import { isOwner, lastJobRun, recentErrors } from "@/lib/monitor";
-import { aiConfigured, aiProvider } from "@/lib/ai/provider";
+import { aiConfigured, aiIsPrivate, aiProvider } from "@/lib/ai/provider";
+import { RENTCAST, rentcastConfigured, rentcastMonthlyLimit } from "@/lib/listings/rentcast";
+import { usedThisMonth } from "@/lib/usage";
 import { pushConfigured } from "@/lib/push";
 
 type Check = { label: string; ok: boolean; detail: string };
@@ -27,19 +29,34 @@ export default async function StatusPage() {
   if (!isOwner(agent)) notFound();
 
   const db = await getDb();
-  const [database, searchRun, briefRun, errors, [agents], [clients]] = await Promise.all([
+  const [database, searchRun, briefRun, errors, [agents], [clients], feedUsed] = await Promise.all([
     databaseAnswers(),
     lastJobRun("search"),
     lastJobRun("briefs"),
     recentErrors(),
     db.select({ n: count() }).from(schema.agents),
     db.select({ n: count() }).from(schema.buyers),
+    usedThisMonth(RENTCAST).catch(() => 0),
   ]);
   const ranToday = (run: { createdAt: Date } | null) => Boolean(run && Date.now() - run.createdAt.getTime() < 26 * HOURS);
 
   const checks: Check[] = [
     { label: "Database", ok: database, detail: database ? "Answering" : "Not answering. Check DATABASE_URL and Neon." },
     { label: "AI", ok: aiConfigured(), detail: aiConfigured() ? `Using ${aiProvider()}` : `No key for ${aiProvider()}. Searches, chat and drafts won't work.` },
+    {
+      label: "AI privacy",
+      ok: aiIsPrivate(),
+      detail: aiIsPrivate()
+        ? "Client details aren't used to train the AI"
+        : "Free Gemini plan: Google may use what's sent. Turn on billing in Google AI Studio, then set GEMINI_PAID_TIER=true.",
+    },
+    {
+      label: "Listings feed (RentCast)",
+      ok: rentcastConfigured(),
+      detail: rentcastConfigured()
+        ? `${feedUsed} of ${rentcastMonthlyLimit()} free requests used this month. After that, searches use the web until next month.`
+        : "No RENTCAST_API_KEY. Homes are found by searching the web, which is less complete.",
+    },
     { label: "Email", ok: Boolean(process.env.RESEND_API_KEY), detail: process.env.RESEND_API_KEY ? "Resend key set" : "No RESEND_API_KEY. No daily brief or password reset emails." },
     { label: "Drive times and map", ok: Boolean(process.env.ORS_API_KEY), detail: process.env.ORS_API_KEY ? "OpenRouteService key set" : "No ORS_API_KEY. No drive times; homes can't be placed on the map." },
     { label: "Phone notifications", ok: pushConfigured(), detail: pushConfigured() ? "Keys set" : "No VAPID keys." },

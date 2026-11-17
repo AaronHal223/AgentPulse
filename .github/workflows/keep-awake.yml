@@ -1,5 +1,7 @@
 # Render's free plan puts the app to sleep after 15 quiet minutes, and waking takes about a minute.
-# This pings it every 10 minutes from 6 AM to midnight Eastern so it opens instantly during the day.
+# This asks GitHub to ping it every 10 minutes from 6 AM to midnight Eastern. GitHub treats
+# frequent schedules as best effort and in practice runs this only a few times a day, so for a
+# reliably awake app also add a free uptime monitor (see "Keeping it awake" in the README).
 # It hits /api/live, which doesn't touch the database, so the database still gets to rest.
 # Free for public repositories. Optional: set a repository variable APP_URL if the address changes.
 name: Keep awake
