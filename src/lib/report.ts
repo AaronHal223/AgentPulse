@@ -51,7 +51,8 @@ export type WeeklyReport = { since: Date; counts: WeekCounts; minutesSaved: numb
 export async function weeklyReport(agentId: string, now = new Date()): Promise<WeeklyReport> {
   const db = await getDb();
   const since = new Date(now.getTime() - REPORT_DAYS * 24 * 3600 * 1000);
-  const ofAgent = eq(schema.buyers.agentId, agentId);
+  // The practice client isn't work AgentPulse did, so it stays out of the numbers.
+  const ofAgent = and(eq(schema.buyers.agentId, agentId), eq(schema.buyers.isSample, false));
 
   const [buyers, found, sent, reactions, alerts, voiceNotes] = await Promise.all([
     db.select({ id: schema.buyers.id, name: schema.buyers.name }).from(schema.buyers).where(ofAgent),

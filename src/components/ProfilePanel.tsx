@@ -5,6 +5,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import type { Buyer } from "@/lib/db/schema";
 import { budgetLabel } from "@/lib/profile";
 import { api } from "./fetcher";
+import { UndoBar } from "./UndoBar";
 
 function Chips({ items, tone = "paper" }: { items: string[]; tone?: "paper" | "brand" | "rust" }) {
   const cls = { paper: "bg-paper text-ink-soft", brand: "bg-brand-soft text-brand", rust: "bg-rust-soft text-rust" }[tone];
@@ -93,6 +94,7 @@ function ProfileEditor({ buyer, onDone }: { buyer: Buyer; onDone: (b?: Buyer) =>
   const router = useRouter();
   const [anchors, setAnchors] = useState(buyer.anchors.length ? buyer.anchors : [{ label: "", address: "" }]);
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
 
   async function save(e: React.FormEvent<HTMLFormElement>) {
@@ -136,10 +138,14 @@ function ProfileEditor({ buyer, onDone }: { buyer: Buyer; onDone: (b?: Buyer) =>
   }
 
   async function remove() {
-    if (!confirm(`Delete ${buyer.name} and all their homes? This can't be undone.`)) return;
-    await api(`/api/buyers/${buyer.id}`, { method: "DELETE" });
-    router.push("/buyers");
-    router.refresh();
+    try {
+      await api(`/api/buyers/${buyer.id}`, { method: "DELETE" });
+      router.push("/buyers");
+      router.refresh();
+    } catch (err) {
+      setDeleting(false);
+      setError(err instanceof Error ? err.message : "Couldn't delete this client");
+    }
   }
 
   const field = (name: string, label: string, value: string | number | null | undefined, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
@@ -212,7 +218,8 @@ function ProfileEditor({ buyer, onDone }: { buyer: Buyer; onDone: (b?: Buyer) =>
       <div className="flex items-center gap-2">
         <button disabled={busy} className="btn-primary">{busy ? "Saving…" : "Save"}</button>
         <button type="button" onClick={() => onDone()} className="btn-ghost">Cancel</button>
-        <button type="button" onClick={remove} className="ml-auto inline-flex items-center gap-1 text-sm text-muted hover:text-rust">
+        {deleting && <UndoBar label={`Deleting ${buyer.name} and their homes`} onCommit={remove} onUndo={() => setDeleting(false)} />}
+        <button type="button" onClick={() => setDeleting(true)} disabled={deleting} className="ml-auto inline-flex items-center gap-1 text-sm text-muted hover:text-rust">
           <Trash2 size={14} /> Delete
         </button>
       </div>

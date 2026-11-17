@@ -15,6 +15,9 @@ import { searchHomesForBuyer } from "./ai/search";
 const STALE_HOURS = 20;
 const staleBefore = () => new Date(Date.now() - STALE_HOURS * 3600 * 1000);
 
+// Paused clients and the practice client are never searched for.
+const realAndActive = and(eq(schema.buyers.active, true), eq(schema.buyers.isSample, false));
+
 export type Due = { buyer: Buyer; agent: Agent };
 export type StepResult = { buyerId: string; name: string; summary: string; error?: string };
 
@@ -27,7 +30,7 @@ export async function dueForSearch(): Promise<Due[]> {
     .select({ buyer: schema.buyers, agent: schema.agents })
     .from(schema.buyers)
     .innerJoin(schema.agents, eq(schema.buyers.agentId, schema.agents.id))
-    .where(and(eq(schema.buyers.active, true), or(isNull(schema.buyers.lastSearchedAt), lt(schema.buyers.lastSearchedAt, staleBefore()))))
+    .where(and(realAndActive, or(isNull(schema.buyers.lastSearchedAt), lt(schema.buyers.lastSearchedAt, staleBefore()))))
     .orderBy(asc(schema.buyers.lastSearchedAt));
 }
 
@@ -49,7 +52,7 @@ export async function dueForRecheck(): Promise<Due[]> {
     .select({ buyer: schema.buyers, agent: schema.agents })
     .from(schema.buyers)
     .innerJoin(schema.agents, eq(schema.buyers.agentId, schema.agents.id))
-    .where(and(eq(schema.buyers.active, true), inArray(schema.buyers.id, stale.map((s) => s.buyerId))));
+    .where(and(realAndActive, inArray(schema.buyers.id, stale.map((s) => s.buyerId))));
 }
 
 export async function searchStep({ agent, buyer }: Due): Promise<StepResult> {

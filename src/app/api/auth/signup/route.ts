@@ -49,7 +49,7 @@ export const POST = handler(async (req: Request) => {
       marketArea: body.marketArea || null,
       briefEmail: body.email,
     })
-    .returning({ id: schema.agents.id });
-  await startSession(agent.id);
+    .returning({ id: schema.agents.id, sessionVersion: schema.agents.sessionVersion });
+  await startSession(agent);
   return NextResponse.json({ ok: true });
 });

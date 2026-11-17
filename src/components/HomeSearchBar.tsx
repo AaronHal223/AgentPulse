@@ -5,6 +5,7 @@ import { Link2, Search } from "lucide-react";
 import type { Buyer, Match } from "@/lib/db/schema";
 import { timeAgo } from "@/lib/format";
 import { api } from "./fetcher";
+import { Hint } from "./Hint";
 
 const SEARCH_STEPS = [
   "Searching Zillow, Redfin, Realtor.com and more…",
@@ -76,7 +77,12 @@ export function HomeSearchBar({ buyer, notice, onFound, onAnalyzed }: Props) {
     <div className="card p-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="font-serif text-xl font-semibold">Homes for {buyer.name.split(" ")[0]}</h2>
+          <h2 className="font-serif text-xl font-semibold">
+            Homes for {buyer.name.split(" ")[0]}{" "}
+            <Hint label="What do the scores mean?">
+              Each home gets a <strong>score from 1 to 10</strong> for how well it fits this client: budget, size, must-haves, area and drive time. 8 and up is a strong match. Tap <strong>Why this score</strong> on any home to see what helped and hurt.
+            </Hint>
+          </h2>
           <p className="text-sm text-muted">Last searched {timeAgo(lastSearched)} · searches run automatically every morning</p>
         </div>
         <button onClick={findHomes} disabled={searching} className="btn-brand">
