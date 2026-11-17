@@ -4,6 +4,7 @@ import { getDb, schema } from "./db";
 import type { Agent, Buyer } from "./db/schema";
 import { recheckSavedHomes, skipRecheck } from "./ai/recheck";
 import { searchHomesForBuyer } from "./ai/search";
+import { aiConfigured } from "./ai/provider";
 
 /**
  * The morning run, in small steps: a fresh search for each active client, then a second look
@@ -76,6 +77,8 @@ async function searchesToday(): Promise<number> {
  * cap. Anyone left over is first in line tomorrow.
  */
 export async function dueForSearch(now = new Date()): Promise<Due[]> {
+  // Without an AI key every search would fail; wait quietly until it's added.
+  if (!aiConfigured()) return [];
   const db = await getDb();
   const candidates = await db
     .select({ buyer: schema.buyers, agent: schema.agents })
@@ -96,6 +99,7 @@ export async function dueForSearch(now = new Date()): Promise<Due[]> {
 
 /** Active clients with saved homes nobody has looked at since yesterday. */
 export async function dueForRecheck(): Promise<Due[]> {
+  if (!aiConfigured()) return [];
   const db = await getDb();
   const stale = await db
     .selectDistinct({ buyerId: schema.matches.buyerId })

@@ -186,7 +186,7 @@ Tech: Next.js (App Router), TypeScript, Tailwind CSS, Drizzle ORM + Postgres, Ge
 - **Listing data comes from the open web.** Some portals block automated page reads; when that happens the AI uses search results and the same listing on other sites. Always confirm price and availability on the listing before sending it to a client.
 - **Costs.** On Gemini's free tier, nothing (within the daily limit). Paid, each search uses tokens plus web-search fees. See [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing) and [Claude pricing](https://www.anthropic.com/pricing).
 - **Privacy.** Every agent's clients and homes are private to their account.
-- **Backups.** Neon's free plan can restore the database to any moment in the last 6 hours; scheduled daily snapshots need a paid Neon plan. Agents can download their own data any time from Settings.
+- **Backups.** Neon's free plan can restore the database to any moment in the last 6 hours. For a copy that lasts, make a branch in Neon (Branches → New branch, "No compute") before any big change; it costs nothing until it's used. Scheduled daily snapshots need a paid Neon plan. Agents can download their own data any time from Settings.
 - **Password reset needs email.** Without `RESEND_API_KEY` the forgot-password page says so instead of sending a link.
 - **Saving AI calls.** Clients nobody has touched in two weeks are searched every three days instead of daily, and scheduled searches stop at `AI_DAILY_SEARCHES` a day. Anyone left over goes first the next morning.
 - **Re-checks use the AI.** Each morning's look at saved homes is one more AI request per client with saved homes, so it counts toward Gemini's free daily limit. If the limit runs out, the re-check simply waits for the next day.

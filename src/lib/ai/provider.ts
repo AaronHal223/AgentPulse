@@ -1,6 +1,7 @@
 import "server-only";
 import { runClaude } from "./claude";
 import { runGemini } from "./gemini";
+import { HttpError } from "../errors";
 import type { AgentRequest, AgentResult } from "./types";
 
 export type AiProvider = "gemini" | "claude";
@@ -32,7 +33,11 @@ export function aiHearsAudio(): boolean {
   return aiProvider() === "gemini";
 }
 
-export function runAgent(req: AgentRequest): Promise<AgentResult> {
+export const AI_OFF_MESSAGE = "The AI isn't switched on yet, so this can't run. The site owner needs to add the AI key in Render.";
+
+export async function runAgent(req: AgentRequest): Promise<AgentResult> {
+  // A missing key is a setup step, not a crash: say so plainly instead of "something went wrong".
+  if (!aiConfigured()) throw new HttpError(503, AI_OFF_MESSAGE);
   return aiProvider() === "claude" ? runClaude(req) : runGemini(req);
 }
 

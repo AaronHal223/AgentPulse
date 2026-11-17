@@ -2,7 +2,9 @@ import test, { before } from "node:test";
 import assert from "node:assert/strict";
 import { eq } from "drizzle-orm";
 import { schema, type DB } from "../src/lib/db";
-import { dueForSearch, isDueForSearch } from "../src/lib/daily";
+import { dueForRecheck, dueForSearch, isDueForSearch } from "../src/lib/daily";
+import { runAgent } from "../src/lib/ai/provider";
+import { HttpError } from "../src/lib/errors";
 import { fairHousingFlags, keepFairCopy } from "../src/lib/fair-housing";
 import { atClock, toIcs } from "../src/lib/ics";
 import { makeAgent, makeBuyer, useTestDb } from "./helpers/db";
@@ -50,7 +52,20 @@ before(async () => {
   db = await useTestDb();
 });
 
+test("the morning run waits quietly while the AI isn't switched on", async () => {
+  const saved = process.env.GEMINI_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  process.env.AI_PROVIDER = "gemini";
+  const waiting = await makeBuyer(db, (await makeAgent(db)).id, { lastSearchedAt: null });
+  assert.deepEqual(await dueForSearch(), []);
+  assert.deepEqual(await dueForRecheck(), []);
+  await assert.rejects(() => runAgent({ system: "", messages: [{ role: "user", content: "hi" }] } as never), (err: HttpError) => err.status === 503 && /isn't switched on/.test(err.message));
+  if (saved) process.env.GEMINI_API_KEY = saved;
+  await db.delete(schema.buyers).where(eq(schema.buyers.id, waiting.id));
+});
+
 test("the morning run stops at the daily search cap and skips quiet clients", async () => {
+  process.env.GEMINI_API_KEY = "test-key";
   process.env.AI_DAILY_SEARCHES = "2";
   const agent = await makeAgent(db);
   const old = new Date(Date.now() - 40 * 24 * 3600 * 1000);
