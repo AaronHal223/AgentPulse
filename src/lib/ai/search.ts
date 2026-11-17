@@ -9,6 +9,8 @@ import { profileForPrompt } from "../profile";
 import { distancesFrom, geocode, geocodeAnchors } from "../geo";
 import { loadFeedback } from "../feedback";
 import { clampScore, drivePenalty, feedbackAdjustment, feedbackForPrompt, type FeedbackEntry } from "../scoring";
+import { rentcastListings, type Candidate } from "../listings/rentcast";
+import { FAIR_HOUSING_RULES, keepFairCopy } from "../fair-housing";
 import { runAgent, type ToolSpec } from "./provider";
 
 const listingProps = {
@@ -103,7 +105,9 @@ const RUBRIC = `Scoring rubric (1–10) for THIS buyer:
 - 5–6: Workable but with real trade-offs.
 - 3–4: Significant problems (over budget >10%, missing a must-have, too far from important places).
 - 1–2: Hits a deal-breaker or clearly wrong for them.
-Judge the location honestly: if a home is not actually in or right next to the target areas, set inArea=false and explain in areaNote.`;
+Judge the location honestly: if a home is not actually in or right next to the target areas, set inArea=false and explain in areaNote.
+
+${FAIR_HOUSING_RULES}`;
 
 function searchSystem(agent: Agent) {
   const today = new Date().toLocaleDateString("en-US", { dateStyle: "full" });
@@ -195,8 +199,9 @@ async function enrichAndSave(
       baths: l.baths ?? null,
       sqft: l.sqft ?? null,
       propertyType: l.propertyType ?? null,
-      summary: l.summary,
-      blurb: l.blurb,
+      // The blurb is written to be sent to the client, so wording that could read as steering is dropped.
+      summary: keepFairCopy(l.summary),
+      blurb: keepFairCopy(l.blurb),
       score,
       baseScore,
       reasoning: l.reasoning,
@@ -253,9 +258,101 @@ function onPagesFound(listings: Listing[], sources?: string[]): Listing[] {
   return listings.filter((l) => sites.has(siteOf(l.url)));
 }
 
+const fitProps = {
+  ref: { type: "string", description: "The ref of the home, exactly as given." },
+  summary: listingProps.summary,
+  blurb: listingProps.blurb,
+  score: listingProps.score,
+  reasoning: listingProps.reasoning,
+  pros: listingProps.pros,
+  cons: listingProps.cons,
+  inArea: listingProps.inArea,
+  areaNote: listingProps.areaNote,
+};
+
+const fitTool: ToolSpec = {
+  name: "report_fit",
+  description: "Report your evaluation of each home. Call exactly once, with one entry per home worth showing the agent.",
+  schema: {
+    type: "object",
+    properties: { homes: { type: "array", items: { type: "object", properties: fitProps, required: ["ref", "summary", "blurb", "score", "reasoning", "inArea"] } } },
+    required: ["homes"],
+  },
+};
+
+const MAX_TO_JUDGE = 12;
+
+function candidateLine(c: Candidate) {
+  const facts = [
+    c.price != null ? `$${c.price.toLocaleString("en-US")}${c.listingType === "rent" ? "/mo" : ""}` : null,
+    c.beds != null ? `${c.beds} bd` : null,
+    c.baths != null ? `${c.baths} ba` : null,
+    c.sqft != null ? `${c.sqft.toLocaleString("en-US")} sqft` : null,
+    c.propertyType,
+    c.yearBuilt ? `built ${c.yearBuilt}` : null,
+    c.daysOnMarket != null ? `${c.daysOnMarket} days on market` : null,
+  ].filter(Boolean);
+  return `- ref ${c.ref}: ${[c.address, c.city, c.state, c.zip].filter(Boolean).join(", ")}. ${facts.join(", ")}.`;
+}
+
 /**
- * Searches the web for homes for one buyer, scores them and saves new matches. Strong new
- * matches raise an alert; `push` also sends it to the agent's phone (for scheduled runs).
+ * Has the AI judge real listings from the feed. The facts (price, beds, address) come from the
+ * feed and stay as they are; the AI only adds the score and the words.
+ */
+async function judgeCandidates(agent: Agent, buyer: Buyer, candidates: Candidate[], feedback: FeedbackEntry[]): Promise<Listing[]> {
+  let raw: unknown = [];
+  await runAgent({
+    system: `You evaluate real, currently listed homes for real estate agent ${agent.name}'s client. The listing facts come from an MLS feed; trust them and never contradict or embellish them. You don't have photos or descriptions, so base the summary on the facts given and say nothing you can't know.
+
+${RUBRIC}
+
+Leave out homes that clearly don't fit (score 1–3) unless there are very few. Call report_fit exactly once.`,
+    messages: [
+      {
+        role: "user",
+        content: `<client>\n${profileForPrompt(buyer)}\n</client>${feedbackForPrompt(feedback)}\n\nHomes listed now:\n${candidates.map(candidateLine).join("\n")}`,
+      },
+    ],
+    tools: [fitTool],
+    maxTokens: 12000,
+    finalTool: "report_fit",
+    onClientTool: async (name, input) => {
+      if (name === "report_fit") raw = (input as { homes?: unknown }).homes;
+      return { result: "Saved.", stop: true };
+    },
+  });
+
+  const byRef = new Map(candidates.map((c) => [c.ref, c]));
+  return (Array.isArray(raw) ? raw : []).flatMap((item) => {
+    const judged = item as { ref?: unknown };
+    const facts = typeof judged.ref === "string" ? byRef.get(judged.ref) : undefined;
+    if (!facts) return []; // a home the feed never gave us
+    const { ref: _ref, yearBuilt: _built, daysOnMarket: _days, ...listing } = facts;
+    const parsed = Listing.safeParse(stripNulls({ ...(item as object), ...listing }));
+    return parsed.success ? [parsed.data] : [];
+  });
+}
+
+type Known = { url: string; address: string | null };
+
+function isKnown(known: Known[], c: Candidate) {
+  const addr = normalizeAddress(c.address);
+  return known.some((k) => k.url === c.url || (addr && normalizeAddress(k.address) === addr));
+}
+
+/** Real listings from the feed when it's set up and has something new; otherwise null. */
+async function searchFeed(agent: Agent, buyer: Buyer, known: Known[], feedback: FeedbackEntry[]) {
+  const { candidates, note } = await rentcastListings(buyer);
+  const fresh = candidates.filter((c) => !isKnown(known, c)).slice(0, MAX_TO_JUDGE);
+  if (!fresh.length) return { listings: null, note };
+  const listings = await judgeCandidates(agent, buyer, fresh, feedback);
+  return { listings, note: note ?? `Checked ${fresh.length} new listing${fresh.length === 1 ? "" : "s"} from the MLS feed.` };
+}
+
+/**
+ * Finds homes for one buyer, scores them and saves new matches: from the listings feed when
+ * it's set up, otherwise by searching the web. Strong new matches raise an alert; `push` also
+ * sends it to the agent's phone (for scheduled runs).
  */
 export async function searchHomesForBuyer(
   agent: Agent,
@@ -268,10 +365,22 @@ export async function searchHomesForBuyer(
     .from(schema.matches)
     .where(eq(schema.matches.buyerId, buyer.id))
     .orderBy(desc(schema.matches.createdAt))
-    .limit(60);
-
+    .limit(200);
   const feedback = await loadFeedback(buyer.id);
-  const max = opts.maxListings ?? 8;
+
+  const feed = await searchFeed(agent, buyer, known, feedback);
+  const { listings, notes } = feed.listings
+    ? { listings: feed.listings, notes: feed.note }
+    : await searchWeb(agent, buyer, known.slice(0, 60), feedback, opts.maxListings ?? 8, feed.note);
+
+  const matches = await enrichAndSave(buyer, listings, "search", feedback);
+  await db.update(schema.buyers).set({ lastSearchedAt: new Date() }).where(eq(schema.buyers.id, buyer.id));
+  const alerts = await alertNewMatches(agent.id, buyer, matches, { push: opts.push ?? false });
+  return { matches, alerts, notes };
+}
+
+/** The AI searches the web (Zillow, Redfin, rentals sites…) for listings and judges them. */
+async function searchWeb(agent: Agent, buyer: Buyer, known: Known[], feedback: FeedbackEntry[], max: number, feedNote?: string) {
   const knownList = known.length
     ? `\n\nAlready found earlier (skip these, look for different homes):\n${known
         .map((k) => `- ${k.address ?? ""} ${k.url}`)
@@ -303,16 +412,9 @@ export async function searchHomesForBuyer(
 
   const found = parseListings(raw);
   const confirmed = onPagesFound(found, sources);
-  if (confirmed.length < found.length) {
-    const skipped = found.length - confirmed.length;
-    notes = [notes, `Skipped ${skipped} result${skipped === 1 ? "" : "s"} whose link couldn't be confirmed.`]
-      .filter(Boolean)
-      .join(" ");
-  }
-  const matches = await enrichAndSave(buyer, confirmed, "search", feedback);
-  await db.update(schema.buyers).set({ lastSearchedAt: new Date() }).where(eq(schema.buyers.id, buyer.id));
-  const alerts = await alertNewMatches(agent.id, buyer, matches, { push: opts.push ?? false });
-  return { matches, alerts, notes };
+  const skipped = found.length - confirmed.length;
+  const skippedNote = skipped ? `Skipped ${skipped} result${skipped === 1 ? "" : "s"} whose link couldn't be confirmed.` : undefined;
+  return { listings: confirmed, notes: [feedNote, notes, skippedNote].filter(Boolean).join(" ") || undefined };
 }
 
 /** Evaluates one specific listing link (Zillow, Redfin, anything) for a buyer. */
