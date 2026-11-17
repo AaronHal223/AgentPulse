@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, eq, inArray, isNull, lt, ne, or } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lt, max, ne, or, sql } from "drizzle-orm";
 import { getDb, schema } from "./db";
 import type { Agent, Buyer } from "./db/schema";
 import { recheckSavedHomes, skipRecheck } from "./ai/recheck";
@@ -23,15 +23,75 @@ export type StepResult = { buyerId: string; name: string; summary: string; error
 
 const failure = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-/** Active clients not searched for since yesterday, longest-waiting first. */
-export async function dueForSearch(): Promise<Due[]> {
+const DAY_MS = 24 * 3600 * 1000;
+export const QUIET_AFTER_DAYS = 14;
+export const QUIET_EVERY_DAYS = 3;
+
+/** How many scheduled searches may run in a day, so the AI's free daily limit lasts. */
+export const dailySearchCap = () => Number(process.env.AI_DAILY_SEARCHES || 20);
+
+/**
+ * Whether a client is due for a search. Clients nobody has touched in two weeks (no chat, no
+ * reactions, no edits) are searched every three days instead of daily.
+ */
+export function isDueForSearch(lastSearchedAt: Date | null, lastActivityAt: Date, now = new Date()): boolean {
+  if (!lastSearchedAt) return true;
+  const quiet = now.getTime() - lastActivityAt.getTime() > QUIET_AFTER_DAYS * DAY_MS;
+  const waitMs = quiet ? QUIET_EVERY_DAYS * DAY_MS - (24 - STALE_HOURS) * 3600 * 1000 : STALE_HOURS * 3600 * 1000;
+  return now.getTime() - lastSearchedAt.getTime() >= waitMs;
+}
+
+/** The latest thing the agent or client did for each client: a chat message, a reaction, an edit. */
+async function lastActivity(buyerIds: string[]): Promise<Map<string, Date>> {
+  if (!buyerIds.length) return new Map();
   const db = await getDb();
-  return db
+  const [messages, reactions] = await Promise.all([
+    db
+      .select({ buyerId: schema.messages.buyerId, at: max(schema.messages.createdAt) })
+      .from(schema.messages)
+      .where(and(inArray(schema.messages.buyerId, buyerIds), eq(schema.messages.role, "user")))
+      .groupBy(schema.messages.buyerId),
+    db
+      .select({ buyerId: schema.matchFeedback.buyerId, at: max(schema.matchFeedback.createdAt) })
+      .from(schema.matchFeedback)
+      .where(inArray(schema.matchFeedback.buyerId, buyerIds))
+      .groupBy(schema.matchFeedback.buyerId),
+  ]);
+  const latest = new Map<string, Date>();
+  for (const { buyerId, at } of [...messages, ...reactions]) {
+    if (at && (!latest.has(buyerId) || at > latest.get(buyerId)!)) latest.set(buyerId, at);
+  }
+  return latest;
+}
+
+/** Searches already run (by schedule or by hand) in the last day, which count toward the cap. */
+async function searchesToday(): Promise<number> {
+  const db = await getDb();
+  const rows = await db.select({ id: schema.buyers.id }).from(schema.buyers).where(gte(schema.buyers.lastSearchedAt, new Date(Date.now() - DAY_MS)));
+  return rows.length;
+}
+
+/**
+ * Active clients due for a search, longest-waiting first, cut off at what's left of today's
+ * cap. Anyone left over is first in line tomorrow.
+ */
+export async function dueForSearch(now = new Date()): Promise<Due[]> {
+  const db = await getDb();
+  const candidates = await db
     .select({ buyer: schema.buyers, agent: schema.agents })
     .from(schema.buyers)
     .innerJoin(schema.agents, eq(schema.buyers.agentId, schema.agents.id))
     .where(and(realAndActive, or(isNull(schema.buyers.lastSearchedAt), lt(schema.buyers.lastSearchedAt, staleBefore()))))
-    .orderBy(asc(schema.buyers.lastSearchedAt));
+    // Never-searched clients first: Postgres would otherwise put them last.
+    .orderBy(sql`${schema.buyers.lastSearchedAt} asc nulls first`);
+  const activity = await lastActivity(candidates.map((c) => c.buyer.id));
+  const due = candidates.filter(({ buyer }) => {
+    const touched = [activity.get(buyer.id), buyer.updatedAt, buyer.createdAt].filter((d): d is Date => Boolean(d));
+    const lastTouched = new Date(Math.max(...touched.map((d) => d.getTime())));
+    return isDueForSearch(buyer.lastSearchedAt, lastTouched, now);
+  });
+  const left = Math.max(0, dailySearchCap() - (await searchesToday()));
+  return due.slice(0, left);
 }
 
 /** Active clients with saved homes nobody has looked at since yesterday. */
