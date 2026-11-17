@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Phone } from "lucide-react";
 import type { ClientPulse } from "@/lib/pulse-data";
 import type { CallReason } from "@/lib/pulse";
+import { Hint } from "./Hint";
 import { PulseMeter } from "./PulseMeter";
 
 /** Dashboard list of clients worth a call today, with the reason for each. */
@@ -9,7 +10,12 @@ export function CallList({ clients }: { clients: (ClientPulse & { call: CallReas
   if (!clients.length) return null;
   return (
     <section className="space-y-3">
-      <h2 className="font-serif text-xl font-semibold">Who to call today</h2>
+      <h2 className="font-serif text-xl font-semibold">
+        Who to call today{" "}
+        <Hint label="What is the pulse?">
+          The bar next to each name is that client&apos;s <strong>pulse</strong>: how active they&apos;ve been in the last two weeks (likes, passes, notes, opening their page). Hot means they&apos;re engaged right now.
+        </Hint>
+      </h2>
       <ul className="card divide-y divide-line">
         {clients.map(({ buyer, pulse, call }) => (
           <li key={buyer.id} className="flex items-center gap-3 px-4 py-3">
