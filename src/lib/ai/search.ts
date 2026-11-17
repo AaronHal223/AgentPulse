@@ -2,10 +2,13 @@ import "server-only";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, schema } from "../db";
-import type { Agent, Buyer, Match } from "../db/schema";
+import type { Agent, Alert, Buyer, Match } from "../db/schema";
+import { alertNewMatches } from "../alerts";
 import { stripNulls } from "../buyers";
 import { profileForPrompt } from "../profile";
 import { distancesFrom, geocode, geocodeAnchors } from "../geo";
+import { loadFeedback } from "../feedback";
+import { clampScore, drivePenalty, feedbackAdjustment, feedbackForPrompt, type FeedbackEntry } from "../scoring";
 import { runAgent, type ToolSpec } from "./provider";
 
 const listingProps = {
@@ -135,6 +138,7 @@ async function enrichAndSave(
   buyer: Buyer,
   listings: Listing[],
   origin: "search" | "link",
+  feedback: FeedbackEntry[],
 ): Promise<Match[]> {
   const db = await getDb();
 
@@ -143,10 +147,11 @@ async function enrichAndSave(
   if (changed) await db.update(schema.buyers).set({ anchors }).where(eq(schema.buyers.id, buyer.id));
 
   const existing = await db
-    .select({ url: schema.matches.url, address: schema.matches.address })
+    .select({ id: schema.matches.id, url: schema.matches.url, address: schema.matches.address })
     .from(schema.matches)
     .where(eq(schema.matches.buyerId, buyer.id));
   const seenUrls = new Set(existing.map((e) => e.url));
+  const idByUrl = new Map(existing.map((e) => [e.url, e.id]));
   const seenAddrs = new Set(existing.map((e) => normalizeAddress(e.address)).filter(Boolean));
 
   const saved: Match[] = [];
@@ -160,18 +165,21 @@ async function enrichAndSave(
     if (!home && fullAddress) home = await geocode(fullAddress);
     const distances = await distancesFrom(home, anchors);
 
-    // Hold the score accountable to the buyer's drive-time limit.
-    let score = l.score;
-    const cons = [...(l.cons ?? [])];
-    if (buyer.maxDriveMinutes) {
-      for (const d of distances) {
-        if (d.minutes != null && d.minutes > buyer.maxDriveMinutes) {
-          const over = d.minutes - buyer.maxDriveMinutes;
-          score = Math.max(1, score - Math.min(3, Math.ceil(over / 15)));
-          cons.push(`${d.minutes} min drive to ${d.label} (limit ${buyer.maxDriveMinutes})`);
-        }
-      }
-    }
+    const drive = drivePenalty(distances, buyer.maxDriveMinutes);
+    const cons = [...(l.cons ?? []), ...drive.cons];
+    const baseScore = clampScore(l.score - drive.points);
+    // Then let what the agent and client said about earlier homes move it.
+    const facts = {
+      id: idByUrl.get(l.url) ?? "",
+      address: l.address ?? null,
+      city: l.city ?? null,
+      zip: l.zip ?? null,
+      price: l.price ?? null,
+      sqft: l.sqft ?? null,
+      beds: l.beds ?? null,
+      baths: l.baths ?? null,
+    };
+    const score = clampScore(baseScore + feedbackAdjustment(facts, feedback).delta);
 
     const values = {
       buyerId: buyer.id,
@@ -190,6 +198,7 @@ async function enrichAndSave(
       summary: l.summary,
       blurb: l.blurb,
       score,
+      baseScore,
       reasoning: l.reasoning,
       pros: l.pros ?? [],
       cons,
@@ -244,12 +253,15 @@ function onPagesFound(listings: Listing[], sources?: string[]): Listing[] {
   return listings.filter((l) => sites.has(siteOf(l.url)));
 }
 
-/** Searches the web for homes for one buyer, scores them and saves new matches. */
+/**
+ * Searches the web for homes for one buyer, scores them and saves new matches. Strong new
+ * matches raise an alert; `push` also sends it to the agent's phone (for scheduled runs).
+ */
 export async function searchHomesForBuyer(
   agent: Agent,
   buyer: Buyer,
-  opts: { maxListings?: number } = {},
-): Promise<{ matches: Match[]; notes?: string }> {
+  opts: { maxListings?: number; push?: boolean } = {},
+): Promise<{ matches: Match[]; alerts: Alert[]; notes?: string }> {
   const db = await getDb();
   const known = await db
     .select({ url: schema.matches.url, address: schema.matches.address })
@@ -258,6 +270,7 @@ export async function searchHomesForBuyer(
     .orderBy(desc(schema.matches.createdAt))
     .limit(60);
 
+  const feedback = await loadFeedback(buyer.id);
   const max = opts.maxListings ?? 8;
   const knownList = known.length
     ? `\n\nAlready found earlier (skip these, look for different homes):\n${known
@@ -272,7 +285,7 @@ export async function searchHomesForBuyer(
     messages: [
       {
         role: "user",
-        content: `Find up to ${max} homes ${buyer.intent === "rent" ? "for RENT" : "for SALE"} for this client and evaluate each one.\n\n<client>\n${profileForPrompt(buyer)}\n</client>${knownList}`,
+        content: `Find up to ${max} homes ${buyer.intent === "rent" ? "for RENT" : "for SALE"} for this client and evaluate each one.\n\n<client>\n${profileForPrompt(buyer)}\n</client>${feedbackForPrompt(feedback)}${knownList}`,
       },
     ],
     tools: [reportTool],
@@ -296,13 +309,15 @@ export async function searchHomesForBuyer(
       .filter(Boolean)
       .join(" ");
   }
-  const matches = await enrichAndSave(buyer, confirmed, "search");
+  const matches = await enrichAndSave(buyer, confirmed, "search", feedback);
   await db.update(schema.buyers).set({ lastSearchedAt: new Date() }).where(eq(schema.buyers.id, buyer.id));
-  return { matches, notes };
+  const alerts = await alertNewMatches(agent.id, buyer, matches, { push: opts.push ?? false });
+  return { matches, alerts, notes };
 }
 
 /** Evaluates one specific listing link (Zillow, Redfin, anything) for a buyer. */
 export async function analyzeListingLink(agent: Agent, buyer: Buyer, url: string): Promise<Match | null> {
+  const feedback = await loadFeedback(buyer.id);
   let raw: unknown = [];
   await runAgent({
     system: searchSystem(agent),
@@ -315,7 +330,7 @@ Open it with web_fetch. If the site blocks the fetch, search the web for the add
 
 <client>
 ${profileForPrompt(buyer)}
-</client>`,
+</client>${feedbackForPrompt(feedback)}`,
       },
     ],
     tools: [reportTool],
@@ -330,6 +345,6 @@ ${profileForPrompt(buyer)}
     },
   });
   const listings = parseListings(raw).map((l, i) => (i === 0 ? { ...l, url } : l)).slice(0, 1);
-  const [match] = await enrichAndSave(buyer, listings, "link");
+  const [match] = await enrichAndSave(buyer, listings, "link", feedback);
   return match ?? null;
 }

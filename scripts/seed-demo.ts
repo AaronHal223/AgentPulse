@@ -45,6 +45,7 @@ async function main() {
       name: "Dana Rivera",
       brokerage: "Demo Realty",
       marketArea: "South Jersey",
+      tone: "Friendly and brief. First names, no exclamation marks. I sign off with just Dana.",
       passwordHash: await bcrypt.hash("demo1234", 10),
       briefEmail: email,
     })
@@ -56,6 +57,7 @@ async function main() {
       agentId: agent.id,
       name: "Raj & Meera Patel",
       email: "patels@example.com",
+      phone: "856-555-0142",
       intent: "buy",
       budgetMin: 500000,
       budgetMax: 600000,
@@ -121,7 +123,7 @@ async function main() {
       blurb: "Big yard, walk-to-everything Collingswood, and room to spare in the budget for a fence upgrade.",
       score: 7, reasoning: "Great location and price, but yard is only partly fenced and no basement office space.",
       pros: ["Deep lot", "Walk to PATCO"], cons: ["Yard only partly fenced", "No finished basement"], inArea: true,
-      areaNote: "Central Collingswood.", distances: [{ label: "Work", miles: 4.1, minutes: 11 }, { label: "School", miles: 2.7, minutes: 8 }],
+      areaNote: "Central Collingswood.", lat: 39.9172, lng: -75.0742, distances: [{ label: "Work", miles: 4.1, minutes: 11 }, { label: "School", miles: 2.7, minutes: 8 }],
       createdAt: new Date(now - 4 * 3600 * 1000),
     },
     {
@@ -130,7 +132,7 @@ async function main() {
       summary: "Spacious split-level on a main road with an open yard.",
       blurb: "Plenty of space, but it's on Kings Highway and outside your target towns.",
       score: 3, reasoning: "Over budget, on a busy road (deal-breaker), and outside the target areas.",
-      pros: ["Large"], cons: ["Busy road", "Over budget"], inArea: false, areaNote: "Cherry Hill, not one of the target towns.",
+      pros: ["Large"], cons: ["Busy road", "Over budget"], inArea: false, areaNote: "Cherry Hill, not one of the target towns.", lat: 39.9079, lng: -75.0119,
       distances: [{ label: "Work", miles: 7.8, minutes: 17 }, { label: "School", miles: 2.2, minutes: 6 }],
       createdAt: new Date(now - 4 * 3600 * 1000),
     },
@@ -140,8 +142,26 @@ async function main() {
       summary: "Second-floor loft apartment above shops with in-unit washer/dryer; pets allowed with deposit.",
       blurb: "In-unit laundry, cats welcome, and a 4-minute walk to PATCO — right in your budget.",
       score: 8, reasoning: "Meets both must-haves, under budget and very close to PATCO.",
-      pros: ["In-unit laundry", "Cats OK"], cons: ["Street parking only"], inArea: true,
+      pros: ["In-unit laundry", "Cats OK"], cons: ["Street parking only"], inArea: true, lat: 39.9159, lng: -75.0712,
       distances: [{ label: "PATCO station", miles: 0.3, minutes: 2 }], createdAt: new Date(now - 1 * 3600 * 1000),
+    },
+  ]);
+
+  const homes = await db.select().from(schema.matches).where(eq(schema.matches.buyerId, patels.id));
+  const maple = homes.find((h) => h.address === "412 Maple Ave")!;
+  const lees = homes.find((h) => h.address === "27 Lees Ave")!;
+  await db.update(schema.matches).set({ status: "saved" }).where(eq(schema.matches.id, lees.id));
+  await db.insert(schema.matchFeedback).values({ matchId: lees.id, buyerId: patels.id, source: "agent", verdict: "saved" });
+  await db.insert(schema.alerts).values([
+    {
+      agentId: agent.id, buyerId: patels.id, matchId: lees.id, kind: "price_drop",
+      title: "Price drop: 27 Lees Ave, Collingswood", body: "$565,000 → $549,000 (down 2.8%).",
+      data: { oldPrice: 565000, newPrice: 549000 }, createdAt: new Date(now - 90 * 60 * 1000),
+    },
+    {
+      agentId: agent.id, buyerId: patels.id, matchId: maple.id, kind: "new_match",
+      title: "9/10 match for Raj & Meera Patel", body: "412 Maple Ave, Haddonfield · $589,000",
+      data: { score: 9 }, createdAt: new Date(now - 2 * 3600 * 1000),
     },
   ]);
 

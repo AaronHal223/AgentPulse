@@ -26,6 +26,54 @@ async function req(path, { method = "GET", body, expect = 200, redirect = "manua
   return res;
 }
 
+/** A client's private link opens without a login, and stops working once it's switched off. */
+async function shareLinkChecks(buyerId) {
+  const { link } = await (await req(`/api/buyers/${buyerId}/share`, { method: "POST" })).json();
+  const path = link?.url ? new URL(link.url).pathname : "";
+  if (!/^\/s\/[A-Za-z0-9_-]{43}$/.test(path)) {
+    failures++;
+    console.log(`✗ share link should be /s/<long random token>, got ${link?.url}`);
+    return;
+  }
+  const agentCookie = cookie;
+  cookie = ""; // the client has no login
+
+  const page = await req(path);
+  const html = await page.text();
+  if (!html.includes("Test Client") || page.headers.get("x-robots-tag") !== "noindex, nofollow") {
+    failures++;
+    console.log("✗ the client page should show the client's name and be hidden from search engines");
+  }
+  const token = path.split("/")[2];
+  await req(`/api/share/${token}/reactions`, { method: "POST", body: { matchId: "not-on-this-page", reaction: "liked" }, expect: 404 });
+  await req(`/api/share/${"x".repeat(43)}/reactions`, { method: "POST", body: { matchId: "any", reaction: "liked" }, expect: 404 });
+  // Someone who isn't logged in can't make or switch off links.
+  await req(`/api/buyers/${buyerId}/share`, { method: "POST", expect: 401 });
+
+  cookie = agentCookie;
+  await req(`/api/buyers/${buyerId}/share`, { method: "DELETE" });
+  cookie = "";
+  if (!(await (await req(path)).text()).includes("no longer active")) {
+    failures++;
+    console.log("✗ a switched-off link should say it is no longer active");
+  }
+  await req(`/api/share/${token}/reactions`, { method: "POST", body: { matchId: "any", reaction: "liked" }, expect: 404 });
+  cookie = agentCookie;
+}
+
+/** Alerts and notification settings answer for the logged-in agent and reject bad input. */
+async function alertChecks() {
+  const inbox = await (await req("/api/alerts")).json();
+  if (!Array.isArray(inbox.alerts) || inbox.unread !== 0) {
+    failures++;
+    console.log("✗ a new agent should have an empty alerts list");
+  }
+  await req("/api/alerts", { method: "PATCH", body: {} });
+  await req("/api/push");
+  // A notification address that isn't a real push service is never accepted (503 when push isn't set up).
+  await req("/api/push", { method: "POST", body: { endpoint: "https://example.com/hook", keys: { p256dh: "a", auth: "b" } }, expect: [400, 503] });
+}
+
 async function main() {
   // Public pages and app-install files
   await req("/");
@@ -66,7 +114,26 @@ async function main() {
     console.log("✗ client was not created");
   } else {
     await req(`/api/buyers/${id}`, { method: "PATCH", body: { mustHaves: ["Yard"], budgetMin: null } });
-    for (const p of ["/dashboard", "/buyers", "/buyers/new", `/buyers/${id}`, "/settings"]) await req(p);
+    for (const p of ["/dashboard", "/buyers", "/buyers/new", `/buyers/${id}`, "/alerts", "/settings"]) await req(p);
+    await alertChecks();
+    // Voice notes: bad input is refused before any AI is called, and other agents' clients don't exist.
+    await req(`/api/buyers/${id}/voice-notes`, { method: "POST", body: { transcript: "" }, expect: 400 });
+    await req(`/api/buyers/${id}/voice-notes/not-a-note/confirm`, { method: "POST", body: { fields: [] }, expect: 404 });
+    await req("/api/buyers/not-my-client/voice-notes", { method: "POST", body: { transcript: "hello there" }, expect: 404 });
+    // Map and commute: refreshing drive times works with no homes yet, and only for the agent's own client.
+    await req(`/api/buyers/${id}/drive-times`, { method: "POST" });
+    await req("/api/buyers/not-my-client/drive-times", { method: "POST", expect: 404 });
+    // Productivity tools: clear answers when there's nothing to work with, and nothing for other agents' clients.
+    await req(`/api/buyers/${id}/follow-up`, { method: "POST", body: { channel: "text" }, expect: 422 });
+    await req(`/api/buyers/${id}/follow-up`, { method: "POST", body: { channel: "fax" }, expect: 400 });
+    await req(`/api/buyers/${id}/tour`, { method: "POST", body: { matchIds: ["only-one"], startTime: "10:00", visitMinutes: 30 }, expect: 400 });
+    await req("/api/buyers/not-my-client/tour", { method: "POST", body: { matchIds: ["a", "b"], startTime: "10:00", visitMinutes: 30 }, expect: 404 });
+    await req("/report");
+    // Home feedback routes only answer for homes the agent owns.
+    await req("/api/matches/not-a-real-home", { method: "PATCH", body: { status: "saved" }, expect: 404 });
+    await req("/api/matches/not-a-real-home/why", { expect: 404 });
+    await req("/api/matches/not-a-real-home/send", { method: "POST", expect: 404 });
+    await shareLinkChecks(id);
     await req(`/api/buyers/${id}`, { method: "DELETE" });
   }
   await req("/api/settings", { method: "PATCH", body: { briefEnabled: false } });
@@ -98,6 +165,20 @@ async function main() {
   const victim = `guess-${Date.now()}@example.com`;
   for (let i = 0; i < 10; i++) await req("/api/auth/login", { method: "POST", body: { email: victim, password: `wrong-${i}` }, expect: 401 });
   await req("/api/auth/login", { method: "POST", body: { email: victim, password: "wrong-again" }, expect: 429 });
+
+  // Logged out, the feedback routes refuse everyone.
+  cookie = "";
+  await req("/api/matches/anything", { method: "PATCH", body: { status: "saved" }, expect: 401 });
+  await req("/api/matches/anything/why", { expect: 401 });
+  await req("/api/alerts", { expect: 401 });
+  await req("/api/push", { method: "POST", body: {}, expect: 401 });
+  await req("/api/buyers/anything/recheck", { method: "POST", expect: 401 });
+  await req("/api/buyers/anything/voice-notes", { method: "POST", body: { transcript: "hello there" }, expect: 401 });
+  await req("/api/buyers/anything/voice-notes/transcribe", { method: "POST", body: {}, expect: 401 });
+  await req("/api/buyers/anything/drive-times", { method: "POST", expect: 401 });
+  await req("/api/buyers/anything/follow-up", { method: "POST", body: { channel: "text" }, expect: 401 });
+  await req("/api/buyers/anything/tour", { method: "POST", body: {}, expect: 401 });
+  await req("/report", { expect: 307 });
 
   // Cron endpoints refuse requests without the secret.
   await req("/api/cron/send-briefs", { expect: [401, 503] });

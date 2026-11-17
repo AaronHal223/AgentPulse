@@ -9,6 +9,7 @@ const Body = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   brokerage: z.string().trim().max(160).optional(),
   marketArea: z.string().trim().max(160).optional(),
+  tone: z.string().trim().max(600).optional(),
   briefEmail: z.string().trim().email().or(z.literal("")).optional(),
   briefEnabled: z.boolean().optional(),
 });
@@ -23,6 +24,7 @@ export const PATCH = handler(async (req: Request) => {
       ...body,
       brokerage: body.brokerage === "" ? null : body.brokerage,
       marketArea: body.marketArea === "" ? null : body.marketArea,
+      tone: body.tone === "" ? null : body.tone,
       briefEmail: body.briefEmail === "" ? null : body.briefEmail,
     })
     .where(eq(schema.agents.id, agent.id));
